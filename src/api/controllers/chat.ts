@@ -13,8 +13,8 @@ import util from "@/lib/util.ts";
 
 // 模型名称
 const MODEL_NAME = "hailuo";
-// access_token有效期
-const ACCESS_TOKEN_EXPIRES = 3600;
+// 设备信息有效期
+const DEVICE_INFO_EXPIRES = 10800;
 // 最大重试次数
 const MAX_RETRY_COUNT = 3;
 // 重试延迟
@@ -22,7 +22,9 @@ const RETRY_DELAY = 5000;
 // 伪装headers
 const FAKE_HEADERS = {
   Accept: "*/*",
-  Platform: "pc",
+  "Accept-Encoding": "gzip, deflate, br, zstd",
+  "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+  "Cache-Control": "no-cache",
   Origin: 'https://hailuoai.com',
   Pragma: 'no-cache',
   Priority: 'u=1, i',
@@ -33,67 +35,82 @@ const FAKE_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 };
+// 伪装数据
+const FAKE_USER_DATA = {
+  device_platform: "web",
+  app_id: "3001",
+  uuid: null,
+  device_id: null,
+  version_code: "21200",
+  os_name: "Windows",
+  browser_name: "chrome",
+  server_version: "101",
+  device_memory: 8,
+  cpu_core_num: 16,
+  browser_language: "zh-CN",
+  browser_platform: "Win32",
+  screen_width: 2560,
+  screen_height: 1440,
+  unix: null
+};
 // 文件最大大小
 const FILE_MAX_SIZE = 100 * 1024 * 1024;
-// access_token映射
-const accessTokenMap = new Map();
-// access_token请求队列映射
-const accessTokenRequestQueueMap: Record<string, Function[]> = {};
+// 设备信息映射
+const deviceInfoMap = new Map();
+// 设备信息请求队列映射
+const deviceInfoRequestQueueMap: Record<string, Function[]> = {};
 
 /**
- * 请求access_token
- *
- * 使用refresh_token去刷新获得access_token
- *
- * @param refreshToken 用于刷新access_token的refresh_token
+ * 请求设备信息
  */
-async function requestToken(refreshToken: string) {
-  if (accessTokenRequestQueueMap[refreshToken])
+async function requestDeviceInfo(token: string) {
+  if (deviceInfoRequestQueueMap[token])
     return new Promise((resolve) =>
-      accessTokenRequestQueueMap[refreshToken].push(resolve)
+      deviceInfoRequestQueueMap[token].push(resolve)
     );
-  accessTokenRequestQueueMap[refreshToken] = [];
-  logger.info(`Refresh token: ${refreshToken}`);
+  deviceInfoRequestQueueMap[token] = [];
+  logger.info(`Token: ${token}`);
   const result = await (async () => {
+    const userId = util.uuid();
     const result = await axios.post(
-      "https://chatglm.cn/chatglm/backend-api/v1/user/refresh",
-      {},
+      "https://hailuoai.com/v1/api/user/device/register?device_platform=web&app_id=3001&uuid=f53c651c-e6d1-470f-8c1c-2110b23262b0&version_code=21200&os_name=Windows&browser_name=chrome&server_version=101&device_memory=8&cpu_core_num=16&browser_language=zh-CN&browser_platform=Win32&screen_width=2560&screen_height=1440&unix=1714495893000",
+      {
+        uuid: userId
+      },
       {
         headers: {
-          Authorization: `Bearer ${refreshToken}`,
-          Referer: "https://chatglm.cn/main/alltoolsdetail",
-          "X-Device-Id": util.uuid(false),
-          "X-Request-Id": util.uuid(false),
-          ...FAKE_HEADERS,
+          Referer: "https://hailuoai.com/",
+          Token: token,
+          ...FAKE_HEADERS
         },
         timeout: 15000,
         validateStatus: () => true,
       }
     );
-    const { result: _result } = checkResult(result, refreshToken);
-    const { accessToken } = _result;
+    const { result: _result } = checkResult(result, token);
+    const { deviceIDStr } = _result;
     return {
-      accessToken,
-      refreshToken,
-      refreshTime: util.unixTimestamp() + ACCESS_TOKEN_EXPIRES,
+      deviceId: deviceIDStr,
+      userId,
+      refreshTime: util.unixTimestamp() + DEVICE_INFO_EXPIRES
     };
   })()
     .then((result) => {
-      if (accessTokenRequestQueueMap[refreshToken]) {
-        accessTokenRequestQueueMap[refreshToken].forEach((resolve) =>
+      if (deviceInfoRequestQueueMap[token]) {
+        deviceInfoRequestQueueMap[token].forEach((resolve) =>
           resolve(result)
         );
-        delete accessTokenRequestQueueMap[refreshToken];
+        delete deviceInfoRequestQueueMap[token];
       }
       logger.success(`Refresh successful`);
       return result;
     })
     .catch((err) => {
-      if (accessTokenRequestQueueMap[refreshToken]) {
-        accessTokenRequestQueueMap[refreshToken].forEach((resolve) =>
+      if (deviceInfoRequestQueueMap[token]) {
+        deviceInfoRequestQueueMap[token].forEach((resolve) =>
           resolve(err)
         );
-        delete accessTokenRequestQueueMap[refreshToken];
+        delete deviceInfoRequestQueueMap[token];
       }
       return err;
     });
@@ -102,23 +119,21 @@ async function requestToken(refreshToken: string) {
 }
 
 /**
- * 获取缓存中的access_token
+ * 获取缓存中的设备信息
  *
  * 避免短时间大量刷新token，未加锁，如果有并发要求还需加锁
- *
- * @param refreshToken 用于刷新access_token的refresh_token
  */
-async function acquireToken(refreshToken: string): Promise<string> {
-  let result = accessTokenMap.get(refreshToken);
+async function acquireDeviceInfo(token: string): Promise<string> {
+  let result = deviceInfoMap.get(token);
   if (!result) {
-    result = await requestToken(refreshToken);
-    accessTokenMap.set(refreshToken, result);
+    result = await requestDeviceInfo(token);
+    deviceInfoMap.set(token, result);
   }
   if (util.unixTimestamp() > result.refreshTime) {
-    result = await requestToken(refreshToken);
-    accessTokenMap.set(refreshToken, result);
+    result = await requestDeviceInfo(token);
+    deviceInfoMap.set(token, result);
   }
-  return result.accessToken;
+  return result;
 }
 
 /**
@@ -130,15 +145,13 @@ async function acquireToken(refreshToken: string): Promise<string> {
  */
 async function removeConversation(
   convId: string,
-  refreshToken: string,
-  assistantId = DEFAULT_ASSISTANT_ID
+  refreshToken: string
 ) {
   const token = await acquireToken(refreshToken);
 
   const result = await axios.post(
     "https://chatglm.cn/chatglm/backend-api/assistant/conversation/delete",
     {
-      assistant_id: assistantId,
       conversation_id: convId,
     },
     {
@@ -167,7 +180,6 @@ async function removeConversation(
 async function createCompletion(
   messages: any[],
   refreshToken: string,
-  assistantId = DEFAULT_ASSISTANT_ID,
   refConvId = '',
   retryCount = 0
 ) {
@@ -374,82 +386,6 @@ async function createCompletionStream(
           refConvId,
           retryCount + 1
         );
-      })();
-    }
-    throw err;
-  });
-}
-
-async function generateImages(
-  model = "65a232c082ff90a2ad2f15e2",
-  prompt: string,
-  refreshToken: string,
-  retryCount = 0
-) {
-  return (async () => {
-    logger.info(prompt);
-    const messages = [
-      { role: "user", content: prompt.indexOf('画') == -1 ? `请画：${prompt}` : prompt },
-    ];
-    // 请求流
-    const token = await acquireToken(refreshToken);
-    const result = await axios.post(
-      "https://chatglm.cn/chatglm/backend-api/assistant/stream",
-      {
-        assistant_id: model,
-        conversation_id: "",
-        messages: messagesPrepare(messages, []),
-        meta_data: {
-          channel: "",
-          draft_id: "",
-          input_question_type: "xxxx",
-          is_test: false,
-        },
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Referer: `https://chatglm.cn/main/gdetail/${model}`,
-          "X-Device-Id": util.uuid(false),
-          "X-Request-Id": util.uuid(false),
-          ...FAKE_HEADERS,
-        },
-        // 120秒超时
-        timeout: 120000,
-        validateStatus: () => true,
-        responseType: "stream",
-      }
-    );
-
-    if (result.headers["content-type"].indexOf("text/event-stream") == -1)
-      throw new APIException(
-        EX.API_REQUEST_FAILED,
-        `Stream response Content-Type invalid: ${result.headers["content-type"]}`
-      );
-
-    const streamStartTime = util.timestamp();
-    // 接收流为输出文本
-    const { convId, imageUrls } = await receiveImages(result.data);
-    logger.success(
-      `Stream has completed transfer ${util.timestamp() - streamStartTime}ms`
-    );
-
-    // 异步移除会话，如果消息不合规，此操作可能会抛出数据库错误异常，请忽略
-    removeConversation(convId, refreshToken, model).catch((err) =>
-      console.error(err)
-    );
-
-    if (imageUrls.length == 0)
-      throw new APIException(EX.API_IMAGE_GENERATION_FAILED);
-
-    return imageUrls;
-  })().catch((err) => {
-    if (retryCount < MAX_RETRY_COUNT) {
-      logger.error(`Stream response error: ${err.message}`);
-      logger.warn(`Try again after ${RETRY_DELAY / 1000}s...`);
-      return (async () => {
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-        return generateImages(model, prompt, refreshToken, retryCount + 1);
       })();
     }
     throw err;
@@ -697,7 +633,7 @@ function checkResult(result: AxiosResponse, refreshToken: string) {
   const { code, status, message } = result.data;
   if (!_.isFinite(code) && !_.isFinite(status)) return result.data;
   if (code === 0 || status === 0) return result.data;
-  if (code == 401) accessTokenMap.delete(refreshToken);
+  if (code == 401) deviceInfoMap.delete(refreshToken);
   throw new APIException(EX.API_REQUEST_FAILED, `[请求glm失败]: ${message}`);
 }
 
@@ -1126,25 +1062,39 @@ function tokenSplit(authorization: string) {
 }
 
 /**
- * 备用生成cookie
- *
- * 暂时还不需要
- *
- * @param refreshToken
- * @param token
+ * 生成用户数据
  */
-function generateCookie(refreshToken: string, token: string) {
-  const timestamp = util.unixTimestamp();
-  const gsTimestamp = timestamp - Math.round(Math.random() * 2592000);
-  return {
-    chatglm_refresh_token: refreshToken,
-    // chatglm_user_id: '',
-    _ga_PMD05MS2V9: `GS1.1.${gsTimestamp}.18.0.${gsTimestamp}.0.0.0`,
-    chatglm_token: token,
-    chatglm_token_expires: util.getDateString("yyyy-MM-dd HH:mm:ss"),
-    abtestid: "a",
-    // acw_tc: ''
+function generateUserData(deviceInfo: any) {
+  const userData = _.clone(FAKE_USER_DATA);
+  userData.uuid = deviceInfo.userId;
+  userData.device_id = deviceInfo.deviceId;
+  userData.unix = util.unixTimestamp();
+  return userData;
+}
+
+/**
+ * 生成header yy值
+ */
+function generateYy(method: string) {
+  const unix = Date.parse((new Date).toString())
+  const info = {
+    "device_platform": "web",
+    "app_id": "3001",
+    "uuid": util.uuid(),
+    "device_id": "241746114465693704",
+    "version_code": "21200",
+    "os_name": "Windows",
+    "browser_name": "chrome",
+    "server_version": "101",
+    "device_memory": 8,
+    "cpu_core_num": 16,
+    "browser_language": "zh-CN",
+    "browser_platform": "Win32",
+    "screen_width": 2560,
+    "screen_height": 1440,
+    "unix": unix
   };
+
 }
 
 /**
@@ -1179,7 +1129,6 @@ async function getTokenLiveStatus(refreshToken: string) {
 export default {
   createCompletion,
   createCompletionStream,
-  generateImages,
   getTokenLiveStatus,
   tokenSplit,
 };
