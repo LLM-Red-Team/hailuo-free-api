@@ -3,7 +3,7 @@ import path from "path";
 import _ from "lodash";
 import mime from "mime";
 import FormData from "form-data";
-import axios, { AxiosResponse } from "axios";
+import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 
 import APIException from "@/lib/exceptions/APIException.ts";
 import EX from "@/api/consts/exceptions.ts";
@@ -16,7 +16,7 @@ const MODEL_NAME = "hailuo";
 // 设备信息有效期
 const DEVICE_INFO_EXPIRES = 10800;
 // 最大重试次数
-const MAX_RETRY_COUNT = 3;
+const MAX_RETRY_COUNT = 0;
 // 重试延迟
 const RETRY_DELAY = 5000;
 // 伪装headers
@@ -25,9 +25,9 @@ const FAKE_HEADERS = {
   "Accept-Encoding": "gzip, deflate, br, zstd",
   "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
   "Cache-Control": "no-cache",
-  Origin: 'https://hailuoai.com',
-  Pragma: 'no-cache',
-  Priority: 'u=1, i',
+  Origin: "https://hailuoai.com",
+  Pragma: "no-cache",
+  Priority: "u=1, i",
   "Sec-Ch-Ua":
     '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
   "Sec-Ch-Ua-Mobile": "?0",
@@ -51,7 +51,7 @@ const FAKE_USER_DATA = {
   browser_platform: "Win32",
   screen_width: 2560,
   screen_height: 1440,
-  unix: null
+  unix: null,
 };
 // 文件最大大小
 const FILE_MAX_SIZE = 100 * 1024 * 1024;
@@ -62,6 +62,8 @@ const deviceInfoRequestQueueMap: Record<string, Function[]> = {};
 
 /**
  * 请求设备信息
+ *
+ * @param token 认证token
  */
 async function requestDeviceInfo(token: string) {
   if (deviceInfoRequestQueueMap[token])
@@ -72,34 +74,27 @@ async function requestDeviceInfo(token: string) {
   logger.info(`Token: ${token}`);
   const result = await (async () => {
     const userId = util.uuid();
-    const result = await axios.post(
-      "https://hailuoai.com/v1/api/user/device/register?device_platform=web&app_id=3001&uuid=f53c651c-e6d1-470f-8c1c-2110b23262b0&version_code=21200&os_name=Windows&browser_name=chrome&server_version=101&device_memory=8&cpu_core_num=16&browser_language=zh-CN&browser_platform=Win32&screen_width=2560&screen_height=1440&unix=1714495893000",
+    const result = await request(
+      "POST",
+      "/v1/api/user/device/register",
       {
-        uuid: userId
+        uuid: userId,
       },
+      token,
       {
-        headers: {
-          Referer: "https://hailuoai.com/",
-          Token: token,
-          ...FAKE_HEADERS
-        },
-        timeout: 15000,
-        validateStatus: () => true,
+        userId,
       }
     );
-    const { result: _result } = checkResult(result, token);
-    const { deviceIDStr } = _result;
+    const { deviceIDStr } = checkResult(result);
     return {
       deviceId: deviceIDStr,
       userId,
-      refreshTime: util.unixTimestamp() + DEVICE_INFO_EXPIRES
+      refreshTime: util.unixTimestamp() + DEVICE_INFO_EXPIRES,
     };
   })()
     .then((result) => {
       if (deviceInfoRequestQueueMap[token]) {
-        deviceInfoRequestQueueMap[token].forEach((resolve) =>
-          resolve(result)
-        );
+        deviceInfoRequestQueueMap[token].forEach((resolve) => resolve(result));
         delete deviceInfoRequestQueueMap[token];
       }
       logger.success(`Refresh successful`);
@@ -107,9 +102,7 @@ async function requestDeviceInfo(token: string) {
     })
     .catch((err) => {
       if (deviceInfoRequestQueueMap[token]) {
-        deviceInfoRequestQueueMap[token].forEach((resolve) =>
-          resolve(err)
-        );
+        deviceInfoRequestQueueMap[token].forEach((resolve) => resolve(err));
         delete deviceInfoRequestQueueMap[token];
       }
       return err;
@@ -122,6 +115,8 @@ async function requestDeviceInfo(token: string) {
  * 获取缓存中的设备信息
  *
  * 避免短时间大量刷新token，未加锁，如果有并发要求还需加锁
+ *
+ * @param token 认证token
  */
 async function acquireDeviceInfo(token: string): Promise<string> {
   let result = deviceInfoMap.get(token);
@@ -141,46 +136,32 @@ async function acquireDeviceInfo(token: string): Promise<string> {
  *
  * 在对话流传输完毕后移除会话，避免创建的会话出现在用户的对话列表中
  *
- * @param refreshToken 用于刷新access_token的refresh_token
+ * @param token 认证token
  */
-async function removeConversation(
-  convId: string,
-  refreshToken: string
-) {
-  const token = await acquireToken(refreshToken);
-
-  const result = await axios.post(
-    "https://chatglm.cn/chatglm/backend-api/assistant/conversation/delete",
-    {
-      conversation_id: convId,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Referer: `https://chatglm.cn/main/alltoolsdetail`,
-        "X-Device-Id": util.uuid(false),
-        "X-Request-Id": util.uuid(false),
-        ...FAKE_HEADERS,
-      },
-      timeout: 15000,
-      validateStatus: () => true,
-    }
+async function removeConversation(convId: string, token: string) {
+  const deviceInfo = await acquireDeviceInfo(token);
+  const result = await request(
+    "DELETE",
+    `/v1/api/chat/history/${convId}`,
+    {},
+    token,
+    deviceInfo
   );
-  checkResult(result, refreshToken);
+  checkResult(result);
 }
 
 /**
  * 同步对话补全
  *
  * @param messages 参考gpt系列消息格式，多轮对话请完整提供上下文
- * @param refreshToken 用于刷新access_token的refresh_token
- * @param assistantId 智能体ID，默认使用GLM4原版
+ * @param token 认证token
+ * @param refConvId 引用对话ID
  * @param retryCount 重试次数
  */
 async function createCompletion(
   messages: any[],
-  refreshToken: string,
-  refConvId = '',
+  token: string,
+  refConvId = "",
   retryCount = 0
 ) {
   return (async () => {
@@ -190,48 +171,31 @@ async function createCompletion(
     const refFileUrls = extractRefFileUrls(messages);
     const refs = refFileUrls.length
       ? await Promise.all(
-        refFileUrls.map((fileUrl) => uploadFile(fileUrl, refreshToken))
-      )
+          refFileUrls.map((fileUrl) => uploadFile(fileUrl, token))
+        )
       : [];
 
     // 如果引用对话ID不正确则重置引用
-    if (!/[0-9a-zA-Z]{24}/.test(refConvId))
-      refConvId = '';
+    if (!/[0-9]{18}/.test(refConvId)) refConvId = "";
 
     // 请求流
-    const token = await acquireToken(refreshToken);
-    const result = await axios.post(
-      "https://chatglm.cn/chatglm/backend-api/assistant/stream",
-      {
-        assistant_id: assistantId,
-        conversation_id: refConvId,
-        messages: messagesPrepare(messages, refs, !!refConvId),
-        meta_data: {
-          channel: "",
-          draft_id: "",
-          input_question_type: "xxxx",
-          is_test: false,
-        },
-      },
+    const deviceInfo = await acquireDeviceInfo(token);
+    const result = await request(
+      "POST",
+      "/v4/api/chat/msg",
+      messagesPrepare(messages, refs, refConvId),
+      token,
+      deviceInfo,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
-          Referer:
-            assistantId == DEFAULT_ASSISTANT_ID
-              ? "https://chatglm.cn/main/alltoolsdetail"
-              : `https://chatglm.cn/main/gdetail/${assistantId}`,
-          "X-Device-Id": util.uuid(false),
-          "X-Request-Id": util.uuid(false),
-          ...FAKE_HEADERS,
+          Accept: 'text/event-stream',
+          Referer: refConvId ? `https://hailuoai.com/?chat=${refConvId}` : 'https://hailuoai.com/'
         },
-        // 120秒超时
-        timeout: 120000,
-        validateStatus: () => true,
-        responseType: "stream",
+        responseType: "stream"
       }
     );
     if (result.headers["content-type"].indexOf("text/event-stream") == -1) {
-      result.data.on("data", buffer => logger.error(buffer.toString()));
+      result.data.on("data", (buffer) => logger.error(buffer.toString()));
       throw new APIException(
         EX.API_REQUEST_FAILED,
         `Stream response Content-Type invalid: ${result.headers["content-type"]}`
@@ -246,8 +210,8 @@ async function createCompletion(
     );
 
     // 异步移除会话
-    removeConversation(answer.id, refreshToken, assistantId).catch((err) =>
-      !refConvId && console.error(err)
+    removeConversation(answer.id, token).catch(
+      (err) => !refConvId && console.error(err)
     );
 
     return answer;
@@ -257,13 +221,7 @@ async function createCompletion(
       logger.warn(`Try again after ${RETRY_DELAY / 1000}s...`);
       return (async () => {
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-        return createCompletion(
-          messages,
-          refreshToken,
-          assistantId,
-          refConvId,
-          retryCount + 1
-        );
+        return createCompletion(messages, token, refConvId, retryCount + 1);
       })();
     }
     throw err;
@@ -274,15 +232,14 @@ async function createCompletion(
  * 流式对话补全
  *
  * @param messages 参考gpt系列消息格式，多轮对话请完整提供上下文
- * @param refreshToken 用于刷新access_token的refresh_token
- * @param assistantId 智能体ID，默认使用GLM4原版
+ * @param token 认证token
+ * @param refConvId 引用对话ID
  * @param retryCount 重试次数
  */
 async function createCompletionStream(
   messages: any[],
-  refreshToken: string,
-  assistantId = DEFAULT_ASSISTANT_ID,
-  refConvId = '',
+  token: string,
+  refConvId = "",
   retryCount = 0
 ) {
   return (async () => {
@@ -292,43 +249,26 @@ async function createCompletionStream(
     const refFileUrls = extractRefFileUrls(messages);
     const refs = refFileUrls.length
       ? await Promise.all(
-        refFileUrls.map((fileUrl) => uploadFile(fileUrl, refreshToken))
-      )
+          refFileUrls.map((fileUrl) => uploadFile(fileUrl, token))
+        )
       : [];
 
     // 如果引用对话ID不正确则重置引用
-    if (!/[0-9a-zA-Z]{24}/.test(refConvId))
-      refConvId = '';
+    if (!/[0-9]{18}/.test(refConvId)) refConvId = "";
 
     // 请求流
-    const token = await acquireToken(refreshToken);
-    const result = await axios.post(
-      `https://chatglm.cn/chatglm/backend-api/assistant/stream`,
-      {
-        assistant_id: assistantId,
-        conversation_id: refConvId,
-        messages: messagesPrepare(messages, refs, !!refConvId),
-        meta_data: {
-          channel: "",
-          draft_id: "",
-          input_question_type: "xxxx",
-          is_test: false,
-        },
-      },
+    const deviceInfo = await acquireDeviceInfo(token);
+    const result = await request(
+      "POST",
+      "/v4/api/chat/msg",
+      messagesPrepare(messages, refs, refConvId),
+      token,
+      deviceInfo,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
-          Referer:
-            assistantId == DEFAULT_ASSISTANT_ID
-              ? "https://chatglm.cn/main/alltoolsdetail"
-              : `https://chatglm.cn/main/gdetail/${assistantId}`,
-          "X-Device-Id": util.uuid(false),
-          "X-Request-Id": util.uuid(false),
-          ...FAKE_HEADERS,
+          Accept: 'text/event-stream',
+          Referer: refConvId ? `https://hailuoai.com/?chat=${refConvId}` : 'https://hailuoai.com/'
         },
-        // 120秒超时
-        timeout: 120000,
-        validateStatus: () => true,
         responseType: "stream",
       }
     );
@@ -338,7 +278,7 @@ async function createCompletionStream(
         `Invalid response Content-Type:`,
         result.headers["content-type"]
       );
-      result.data.on("data", buffer => logger.error(buffer.toString()));
+      result.data.on("data", (buffer) => logger.error(buffer.toString()));
       const transStream = new PassThrough();
       transStream.end(
         `data: ${JSON.stringify({
@@ -369,8 +309,8 @@ async function createCompletionStream(
         `Stream has completed transfer ${util.timestamp() - streamStartTime}ms`
       );
       // 流传输结束后异步移除会话
-      removeConversation(convId, refreshToken, assistantId).catch((err) =>
-        !refConvId && console.error(err)
+      removeConversation(convId, token).catch(
+        (err) => !refConvId && console.error(err)
       );
     });
   })().catch((err) => {
@@ -381,8 +321,7 @@ async function createCompletionStream(
         await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
         return createCompletionStream(
           messages,
-          refreshToken,
-          assistantId,
+          token,
           refConvId,
           retryCount + 1
         );
@@ -435,31 +374,29 @@ function extractRefFileUrls(messages: any[]) {
  *
  * @param messages 参考gpt系列消息格式，多轮对话请完整提供上下文
  * @param refs 参考文件列表
- * @param isRefConv 是否为引用会话
+ * @param refConvId 引用对话ID
  */
-function messagesPrepare(messages: any[], refs: any[], isRefConv = false) {
+function messagesPrepare(messages: any[], refs: any[], refConvId: string) {
   let content;
-  if (isRefConv || messages.length < 2) {
+  if (refConvId || messages.length < 2) {
     content = messages.reduce((content, message) => {
       if (_.isArray(message.content)) {
-        return (
-          message.content.reduce((_content, v) => {
-            if (!_.isObject(v) || v["type"] != "text") return _content;
-            return _content + (v["text"] || "") + "\n";
-          }, content)
-        );
+        return message.content.reduce((_content, v) => {
+          if (!_.isObject(v) || v["type"] != "text") return _content;
+          return _content + (v["text"] || "") + "\n";
+        }, content);
       }
       return content + `${message.content}\n`;
     }, "");
     logger.info("\n透传内容：\n" + content);
-  }
-  else {
+  } else {
     // 检查最新消息是否含有"type": "image_url"或"type": "file",如果有则注入消息
     let latestMessage = messages[messages.length - 1];
     let hasFileOrImage =
       Array.isArray(latestMessage.content) &&
       latestMessage.content.some(
-        (v) => typeof v === "object" && ["file", "image_url"].includes(v["type"])
+        (v) =>
+          typeof v === "object" && ["file", "image_url"].includes(v["type"])
       );
     if (hasFileOrImage) {
       let newFileMessage = {
@@ -484,12 +421,10 @@ function messagesPrepare(messages: any[], refs: any[], isRefConv = false) {
           .replace("assistant", "<|assistant|>")
           .replace("user", "<|user|>");
         if (_.isArray(message.content)) {
-          return (
-            message.content.reduce((_content, v) => {
-              if (!_.isObject(v) || v["type"] != "text") return _content;
-              return _content + (`${role}\n` + v["text"] || "") + "\n";
-            }, content)
-          );
+          return message.content.reduce((_content, v) => {
+            if (!_.isObject(v) || v["type"] != "text") return _content;
+            return _content + (`${role}\n` + v["text"] || "") + "\n";
+          }, content);
         }
         return (content += `${role}\n${message.content}\n`);
       }, "") + "<|assistant|>\n"
@@ -508,30 +443,12 @@ function messagesPrepare(messages: any[], refs: any[], isRefConv = false) {
       ref.image_url = ref.file_url;
       return ref;
     });
-  return [
-    {
-      role: "user",
-      content: [
-        { type: "text", text: content },
-        ...(fileRefs.length == 0
-          ? []
-          : [
-            {
-              type: "file",
-              file: fileRefs,
-            },
-          ]),
-        ...(imageRefs.length == 0
-          ? []
-          : [
-            {
-              type: "image",
-              image: imageRefs,
-            },
-          ]),
-      ],
-    },
-  ];
+  const formData = new FormData();
+  formData.append("characterID", "1");
+  formData.append("msgContent", content);
+  formData.append("chatID", refConvId || "0");
+  formData.append("searchMode", "0");
+  return formData;
 }
 
 /**
@@ -601,7 +518,7 @@ async function uploadFile(fileUrl: string, refreshToken: string) {
   });
 
   // 上传文件到目标OSS
-  const token = await acquireToken(refreshToken);
+  const token = await acquireDeviceInfo(refreshToken);
   let result = await axios.request({
     method: "POST",
     url: "https://chatglm.cn/chatglm/backend-api/assistant/file_upload",
@@ -618,7 +535,7 @@ async function uploadFile(fileUrl: string, refreshToken: string) {
     },
     validateStatus: () => true,
   });
-  const { result: uploadResult } = checkResult(result, refreshToken);
+  const { result: uploadResult } = checkResult(result);
 
   return uploadResult;
 }
@@ -628,13 +545,13 @@ async function uploadFile(fileUrl: string, refreshToken: string) {
  *
  * @param result 结果
  */
-function checkResult(result: AxiosResponse, refreshToken: string) {
+function checkResult(result: AxiosResponse) {
   if (!result.data) return null;
-  const { code, status, message } = result.data;
-  if (!_.isFinite(code) && !_.isFinite(status)) return result.data;
-  if (code === 0 || status === 0) return result.data;
-  if (code == 401) deviceInfoMap.delete(refreshToken);
-  throw new APIException(EX.API_REQUEST_FAILED, `[请求glm失败]: ${message}`);
+  const { statusInfo, data } = result.data;
+  if (!_.isObject(statusInfo)) return result.data;
+  const { code, message } = statusInfo as any;
+  if (code === 0) return data;
+  throw new APIException(EX.API_REQUEST_FAILED, `[请求hailuo失败]: ${message}`);
 }
 
 /**
@@ -658,124 +575,16 @@ async function receiveStream(stream: any): Promise<any> {
       ],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
       created: util.unixTimestamp(),
-    };
-    let toolCall = false;
-    let codeGenerating = false;
-    let textChunkLength = 0;
-    let codeTemp = "";
-    let lastExecutionOutput = "";
-    let textOffset = 0;
+    };;
     const parser = createParser((event) => {
       try {
-        if (event.type !== "event") return;
-        // 解析JSON
-        const result = _.attempt(() => JSON.parse(event.data));
-        if (_.isError(result))
-          throw new Error(`Stream response invalid: ${event.data}`);
-        if (!data.id && result.conversation_id)
-          data.id = result.conversation_id;
-        if (result.status != "finish") {
-          const text = result.parts.reduce((str, part) => {
-            const { status, content, meta_data } = part;
-            if (!_.isArray(content)) return str;
-            const partText = content.reduce((innerStr, value) => {
-              const {
-                status: partStatus,
-                type,
-                text,
-                image,
-                code,
-                content,
-              } = value;
-              if (partStatus == "init" && textChunkLength > 0) {
-                textOffset += textChunkLength + 1;
-                textChunkLength = 0;
-                innerStr += "\n";
-              }
-              if (type == "text") {
-                if (toolCall) {
-                  innerStr += "\n";
-                  textOffset++;
-                  toolCall = false;
-                }
-                if (partStatus == "finish") textChunkLength = text.length;
-                return innerStr + text;
-              } else if (
-                type == "quote_result" &&
-                status == "finish" &&
-                meta_data &&
-                _.isArray(meta_data.metadata_list)
-              ) {
-                const searchText =
-                  meta_data.metadata_list.reduce(
-                    (meta, v) => meta + `检索 ${v.title}(${v.url}) ...`,
-                    ""
-                  ) + "\n";
-                textOffset += searchText.length;
-                toolCall = true;
-                return innerStr + searchText;
-              } else if (
-                type == "image" &&
-                _.isArray(image) &&
-                status == "finish"
-              ) {
-                const imageText =
-                  image.reduce(
-                    (imgs, v) =>
-                      imgs +
-                      (/^(http|https):\/\//.test(v.image_url)
-                        ? `![图像](${v.image_url || ""})`
-                        : ""),
-                    ""
-                  ) + "\n";
-                textOffset += imageText.length;
-                toolCall = true;
-                return innerStr + imageText;
-              } else if (type == "code" && partStatus == "init") {
-                let codeHead = "";
-                if (!codeGenerating) {
-                  codeGenerating = true;
-                  codeHead = "```python\n";
-                }
-                const chunk = code.substring(codeTemp.length, code.length);
-                codeTemp += chunk;
-                textOffset += codeHead.length + chunk.length;
-                return innerStr + codeHead + chunk;
-              } else if (
-                type == "code" &&
-                partStatus == "finish" &&
-                codeGenerating
-              ) {
-                const codeFooter = "\n```\n";
-                codeGenerating = false;
-                codeTemp = "";
-                textOffset += codeFooter.length;
-                return innerStr + codeFooter;
-              } else if (
-                type == "execution_output" &&
-                _.isString(content) &&
-                partStatus == "done" &&
-                lastExecutionOutput != content
-              ) {
-                lastExecutionOutput = content;
-                const _content = content.replace(/^\n/, "");
-                textOffset += _content.length + 1;
-                return innerStr + _content + "\n";
-              }
-              return innerStr;
-            }, "");
-            return str + partText;
-          }, "");
-          const chunk = text.substring(
-            data.choices[0].message.content.length - textOffset,
-            text.length
-          );
-          data.choices[0].message.content += chunk;
-        } else {
-          data.choices[0].message.content =
-            data.choices[0].message.content.replace(/【\d+†source】/g, "");
-          resolve(data);
-        }
+        console.log(event)
+        // if (event.type !== "event") return;
+        // // 解析JSON
+        // const result = _.attempt(() => JSON.parse(event.data));
+        // if (_.isError(result))
+        //   throw new Error(`Stream response invalid: ${event.data}`);
+        
       } catch (err) {
         logger.error(err);
         reject(err);
@@ -946,8 +755,8 @@ function createTransStream(stream: any, endCallback?: Function) {
               index: 0,
               delta:
                 result.status == "intervene" &&
-                  result.last_error &&
-                  result.last_error.intervene_text
+                result.last_error &&
+                result.last_error.intervene_text
                   ? { content: `\n\n${result.last_error.intervene_text}` }
                   : {},
               finish_reason: "stop",
@@ -980,79 +789,6 @@ function createTransStream(stream: any, endCallback?: Function) {
 }
 
 /**
- * 从流接收图像
- *
- * @param stream 消息流
- */
-async function receiveImages(
-  stream: any
-): Promise<{ convId: string; imageUrls: string[] }> {
-  return new Promise((resolve, reject) => {
-    let convId = "";
-    const imageUrls = [];
-    const parser = createParser((event) => {
-      try {
-        if (event.type !== "event") return;
-        // 解析JSON
-        const result = _.attempt(() => JSON.parse(event.data));
-        if (_.isError(result))
-          throw new Error(`Stream response invalid: ${event.data}`);
-        if (!convId && result.conversation_id) convId = result.conversation_id;
-        if (result.status == "intervene")
-          throw new APIException(EX.API_CONTENT_FILTERED);
-        if (result.status != "finish") {
-          result.parts.forEach((part) => {
-            const { content } = part;
-            if (!_.isArray(content)) return;
-            content.forEach((value) => {
-              const { status: partStatus, type, image, text } = value;
-              if (
-                type == "image" &&
-                _.isArray(image) &&
-                partStatus == "finish"
-              ) {
-                image.forEach((value) => {
-                  if (
-                    !/^(http|https):\/\//.test(value.image_url) ||
-                    imageUrls.indexOf(value.image_url) != -1
-                  )
-                    return;
-                  imageUrls.push(value.image_url);
-                });
-              }
-              if (
-                type == "text" &&
-                partStatus == "finish"
-              ) {
-                const urlPattern = /\((https?:\/\/\S+)\)/g;
-                let match;
-                while ((match = urlPattern.exec(text)) !== null) {
-                  const url = match[1];
-                  if (imageUrls.indexOf(url) == -1)
-                    imageUrls.push(url);
-                }
-              }
-            });
-          });
-        }
-      } catch (err) {
-        logger.error(err);
-        reject(err);
-      }
-    });
-    // 将流数据喂给SSE转换器
-    stream.on("data", (buffer) => parser.feed(buffer.toString()));
-    stream.once("error", (err) => reject(err));
-    stream.once("close", () =>
-      resolve({
-        convId,
-        imageUrls,
-      })
-    );
-  });
-}
-
-/**
  * Token切分
  *
  * @param authorization 认证字符串
@@ -1062,68 +798,75 @@ function tokenSplit(authorization: string) {
 }
 
 /**
- * 生成用户数据
+ * 发起请求
+ *
+ * @param method 请求方法
+ * @param uri 请求uri
+ * @param data 请求数据
+ * @param token 认证token
+ * @param deviceInfo 设备信息
+ * @param options 请求选项
  */
-function generateUserData(deviceInfo: any) {
+async function request(
+  method: string,
+  uri: string,
+  data: any,
+  token: string,
+  deviceInfo: any,
+  options: AxiosRequestConfig = {}
+) {
+  const unix = `${Date.parse(new Date().toString())}`;
   const userData = _.clone(FAKE_USER_DATA);
   userData.uuid = deviceInfo.userId;
-  userData.device_id = deviceInfo.deviceId;
-  userData.unix = util.unixTimestamp();
-  return userData;
-}
-
-/**
- * 生成header yy值
- */
-function generateYy(method: string) {
-  const unix = Date.parse((new Date).toString())
-  const info = {
-    "device_platform": "web",
-    "app_id": "3001",
-    "uuid": util.uuid(),
-    "device_id": "241746114465693704",
-    "version_code": "21200",
-    "os_name": "Windows",
-    "browser_name": "chrome",
-    "server_version": "101",
-    "device_memory": 8,
-    "cpu_core_num": 16,
-    "browser_language": "zh-CN",
-    "browser_platform": "Win32",
-    "screen_width": 2560,
-    "screen_height": 1440,
-    "unix": unix
-  };
-
+  userData.device_id = deviceInfo.deviceId || undefined;
+  userData.unix = unix;
+  let queryStr = "";
+  for (let key in userData) {
+    if (_.isUndefined(userData[key])) continue;
+    queryStr += `&${key}=${userData[key]}`;
+  }
+  queryStr = queryStr.substring(1);
+  const dataJson = JSON.stringify(data || {});
+  const yy = util.md5(
+    encodeURIComponent(`${uri}?${queryStr}_${dataJson}${util.md5(unix)}ooui`)
+  );
+  console.log({
+    method,
+    url: `https://hailuoai.com${uri}?${queryStr}`,
+    data,
+    timeout: 15000,
+    validateStatus: () => true,
+    ...options,
+    headers: {
+      Referer: "https://hailuoai.com/",
+      Token: token,
+      ...FAKE_HEADERS,
+      ...(options.headers || {}),
+      Yy: yy,
+    },
+  });
+  return await axios.request({
+    method,
+    url: `https://hailuoai.com${uri}?${queryStr}`,
+    data,
+    timeout: 15000,
+    validateStatus: () => true,
+    ...options,
+    headers: {
+      Referer: "https://hailuoai.com/",
+      Token: token,
+      ...FAKE_HEADERS,
+      ...(options.headers || {}),
+      yy,
+    },
+  });
 }
 
 /**
  * 获取Token存活状态
  */
 async function getTokenLiveStatus(refreshToken: string) {
-  const result = await axios.post(
-    "https://chatglm.cn/chatglm/backend-api/v1/user/refresh",
-    {},
-    {
-      headers: {
-        Authorization: `Bearer ${refreshToken}`,
-        Referer: "https://chatglm.cn/main/alltoolsdetail",
-        "X-Device-Id": util.uuid(false),
-        "X-Request-Id": util.uuid(false),
-        ...FAKE_HEADERS,
-      },
-      timeout: 15000,
-      validateStatus: () => true,
-    }
-  );
-  try {
-    const { result: _result } = checkResult(result, refreshToken);
-    const { accessToken } = _result;
-    return !!accessToken;
-  }
-  catch (err) {
-    return false;
-  }
+  return false;
 }
 
 export default {
