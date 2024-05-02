@@ -276,6 +276,15 @@ const util = {
     return crypto.createHash("md5").update(value).digest("hex");
   },
 
+  chineseToUnicode(value) {
+    let unicodeString = '';
+    for (let i = 0; i < value.length; i++) {
+      const code = value.charCodeAt(i).toString(16).toUpperCase();
+      unicodeString += '\\u' + ('0000' + code).slice(-4);
+    }
+    return unicodeString;
+  },
+
   crc32(value) {
     return _.isBuffer(value) ? CRC32.buf(value) : CRC32.str(value);
   },

@@ -1,4 +1,5 @@
 import { PassThrough } from "stream";
+import http2, { ClientHttp2Session, ClientHttp2Stream } from "http2";
 import path from "path";
 import _ from "lodash";
 import mime from "mime";
@@ -13,6 +14,8 @@ import util from "@/lib/util.ts";
 
 // 模型名称
 const MODEL_NAME = "hailuo";
+// 角色ID
+const CHARACTER_ID = "1";
 // 设备信息有效期
 const DEVICE_INFO_EXPIRES = 10800;
 // 最大重试次数
@@ -164,6 +167,7 @@ async function createCompletion(
   refConvId = "",
   retryCount = 0
 ) {
+  let session: ClientHttp2Session;
   return (async () => {
     logger.info(messages);
 
@@ -180,7 +184,8 @@ async function createCompletion(
 
     // 请求流
     const deviceInfo = await acquireDeviceInfo(token);
-    const result = await request(
+    let stream: ClientHttp2Stream;
+    const result = await requestStream(
       "POST",
       "/v4/api/chat/msg",
       messagesPrepare(messages, refs, refConvId),
@@ -188,23 +193,24 @@ async function createCompletion(
       deviceInfo,
       {
         headers: {
-          Accept: 'text/event-stream',
-          Referer: refConvId ? `https://hailuoai.com/?chat=${refConvId}` : 'https://hailuoai.com/'
-        },
-        responseType: "stream"
+          Accept: "text/event-stream",
+          Referer: refConvId
+            ? `https://hailuoai.com/?chat=${refConvId}`
+            : "https://hailuoai.com/",
+        }
       }
     );
-    if (result.headers["content-type"].indexOf("text/event-stream") == -1) {
-      result.data.on("data", (buffer) => logger.error(buffer.toString()));
+
+    if (result.headers["content-type"].indexOf("text/event-stream") == -1)
       throw new APIException(
         EX.API_REQUEST_FAILED,
         `Stream response Content-Type invalid: ${result.headers["content-type"]}`
       );
-    }
-
+    
     const streamStartTime = util.timestamp();
     // 接收流为输出文本
     const answer = await receiveStream(result.data);
+    session && session.close();
     logger.success(
       `Stream has completed transfer ${util.timestamp() - streamStartTime}ms`
     );
@@ -216,6 +222,8 @@ async function createCompletion(
 
     return answer;
   })().catch((err) => {
+    session && session.close();
+    session = null;
     if (retryCount < MAX_RETRY_COUNT) {
       logger.error(`Stream response error: ${err.stack}`);
       logger.warn(`Try again after ${RETRY_DELAY / 1000}s...`);
@@ -258,7 +266,7 @@ async function createCompletionStream(
 
     // 请求流
     const deviceInfo = await acquireDeviceInfo(token);
-    const result = await request(
+    const result = await requestStream(
       "POST",
       "/v4/api/chat/msg",
       messagesPrepare(messages, refs, refConvId),
@@ -266,8 +274,10 @@ async function createCompletionStream(
       deviceInfo,
       {
         headers: {
-          Accept: 'text/event-stream',
-          Referer: refConvId ? `https://hailuoai.com/?chat=${refConvId}` : 'https://hailuoai.com/'
+          Accept: "text/event-stream",
+          Referer: refConvId
+            ? `https://hailuoai.com/?chat=${refConvId}`
+            : "https://hailuoai.com/",
         },
         responseType: "stream",
       }
@@ -443,12 +453,12 @@ function messagesPrepare(messages: any[], refs: any[], refConvId: string) {
       ref.image_url = ref.file_url;
       return ref;
     });
-  const formData = new FormData();
-  formData.append("characterID", "1");
-  formData.append("msgContent", content);
-  formData.append("chatID", refConvId || "0");
-  formData.append("searchMode", "0");
-  return formData;
+  return {
+    characterID: CHARACTER_ID,
+    msgContent: content.trim(),
+    chatID: refConvId || "0",
+    searchMode: "0"
+  };
 }
 
 /**
@@ -575,23 +585,24 @@ async function receiveStream(stream: any): Promise<any> {
       ],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
       created: util.unixTimestamp(),
-    };;
+    };
     const parser = createParser((event) => {
       try {
-        console.log(event)
+        console.log(event);
         // if (event.type !== "event") return;
         // // 解析JSON
         // const result = _.attempt(() => JSON.parse(event.data));
         // if (_.isError(result))
         //   throw new Error(`Stream response invalid: ${event.data}`);
-        
       } catch (err) {
         logger.error(err);
         reject(err);
       }
     });
     // 将流数据喂给SSE转换器
-    stream.on("data", (buffer) => parser.feed(buffer.toString()));
+    stream.on("data", (buffer) => {
+      console.log(buffer.toString())
+    });
     stream.once("error", (err) => reject(err));
     stream.once("close", () => resolve(data));
   });
@@ -830,7 +841,7 @@ async function request(
   const yy = util.md5(
     encodeURIComponent(`${uri}?${queryStr}_${dataJson}${util.md5(unix)}ooui`)
   );
-  console.log({
+  return await axios.request({
     method,
     url: `https://hailuoai.com${uri}?${queryStr}`,
     data,
@@ -845,6 +856,95 @@ async function request(
       Yy: yy,
     },
   });
+}
+
+/**
+ * 发起HTTP2.0流式请求
+ *
+ * @param method 请求方法
+ * @param uri 请求uri
+ * @param data 请求数据
+ * @param token 认证token
+ * @param deviceInfo 设备信息
+ * @param options 请求选项
+ */
+async function requestStream(
+  method: string,
+  uri: string,
+  data: any,
+  token: string,
+  deviceInfo: any,
+  options: AxiosRequestConfig = {}
+) {
+  const unix = `${Date.parse(new Date().toString())}`;
+  const userData = _.clone(FAKE_USER_DATA);
+  userData.uuid = deviceInfo.userId;
+  userData.device_id = deviceInfo.deviceId || undefined;
+  userData.unix = unix;
+  let queryStr = "";
+  for (let key in userData) {
+    if (_.isUndefined(userData[key])) continue;
+    queryStr += `&${key}=${userData[key]}`;
+  }
+  queryStr = queryStr.substring(1);
+  const formData = new FormData();
+  for (let key in data) formData.append(key, data[key]);
+  const dataJson = `${util.md5(data.characterID)}${util.md5(
+    data.msgContent
+  )}${util.md5(data.chatID)}${util.md5("")}`;
+  data = formData;
+  const yy = util.md5(
+    encodeURIComponent(`${uri}?${queryStr}_${dataJson}${util.md5(unix)}ooui`)
+  );
+  // const session: ClientHttp2Session = await new Promise(
+  //   (resolve, reject) => {
+  //     const session = http2.connect("https://hailuoai.com");
+  //     session.on("connect", () => resolve(session));
+  //     session.on("error", reject);
+  //   }
+  // );
+  // console.log({
+  //   ":method": method,
+  //   ":path": `${uri}?${queryStr}`,
+  //   ":scheme": "https",
+  //   Referer: "https://hailuoai.com/",
+  //   Token: token,
+  //   ...FAKE_HEADERS,
+  //   ...(options.headers || {}),
+  //   Yy: yy,
+  //   ...data.getHeaders()
+  // });
+  // const stream = session.request({
+  //   ":method": method,
+  //   ":path": `${uri}?${queryStr}`,
+  //   ":scheme": "https",
+  //   Referer: "https://hailuoai.com/",
+  //   Token: token,
+  //   ...FAKE_HEADERS,
+  //   ...(options.headers || {}),
+  //   Yy: yy,
+  //   ...data.getHeaders()
+  // });
+  // stream.setTimeout(120000);
+  // stream.write(data.getBuffer());
+  // stream.setEncoding("utf8");
+  
+  console.log({
+    method,
+    url: `https://hailuoai.com${uri}?${queryStr}`,
+    data,
+    timeout: 15000,
+    validateStatus: () => true,
+    ...options,
+    headers: {
+      Referer: "https://hailuoai.com/",
+      Token: token,
+      ...FAKE_HEADERS,
+      ...(options.headers || {}),
+      Yy: yy,
+    },
+    responseType: "stream"
+  });
   return await axios.request({
     method,
     url: `https://hailuoai.com${uri}?${queryStr}`,
@@ -857,15 +957,20 @@ async function request(
       Token: token,
       ...FAKE_HEADERS,
       ...(options.headers || {}),
-      yy,
+      Yy: yy,
     },
+    responseType: "stream"
   });
+  // return {
+  //   session,
+  //   stream
+  // };
 }
 
 /**
  * 获取Token存活状态
  */
-async function getTokenLiveStatus(refreshToken: string) {
+async function getTokenLiveStatus(token: string) {
   return false;
 }
 
