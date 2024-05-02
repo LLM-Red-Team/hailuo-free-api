@@ -185,7 +185,7 @@ async function createCompletion(
     // 请求流
     const deviceInfo = await acquireDeviceInfo(token);
     let stream: ClientHttp2Stream;
-    const result = await requestStream(
+    ({ session, stream } = await requestStream(
       "POST",
       "/v4/api/chat/msg",
       messagesPrepare(messages, refs, refConvId),
@@ -199,18 +199,12 @@ async function createCompletion(
             : "https://hailuoai.com/",
         }
       }
-    );
+    ));
 
-    if (result.headers["content-type"].indexOf("text/event-stream") == -1)
-      throw new APIException(
-        EX.API_REQUEST_FAILED,
-        `Stream response Content-Type invalid: ${result.headers["content-type"]}`
-      );
-    
     const streamStartTime = util.timestamp();
     // 接收流为输出文本
-    const answer = await receiveStream(result.data);
-    session && session.close();
+    const answer = await receiveStream(stream);
+    session.close();
     logger.success(
       `Stream has completed transfer ${util.timestamp() - streamStartTime}ms`
     );
@@ -588,21 +582,20 @@ async function receiveStream(stream: any): Promise<any> {
     };
     const parser = createParser((event) => {
       try {
-        console.log(event);
-        // if (event.type !== "event") return;
-        // // 解析JSON
-        // const result = _.attempt(() => JSON.parse(event.data));
-        // if (_.isError(result))
-        //   throw new Error(`Stream response invalid: ${event.data}`);
+        if (event.type !== "event") return;
+        const eventName = event.event;
+        // 解析JSON
+        const result = _.attempt(() => JSON.parse(event.data));
+        if (_.isError(result))
+          throw new Error(`Stream response invalid: ${event.data}`);
+        console.log(eventName, result);
       } catch (err) {
         logger.error(err);
         reject(err);
       }
     });
     // 将流数据喂给SSE转换器
-    stream.on("data", (buffer) => {
-      console.log(buffer.toString())
-    });
+    stream.on("data", (buffer) => parser.feed(buffer.toString()));
     stream.once("error", (err) => reject(err));
     stream.once("close", () => resolve(data));
   });
@@ -896,75 +889,33 @@ async function requestStream(
   const yy = util.md5(
     encodeURIComponent(`${uri}?${queryStr}_${dataJson}${util.md5(unix)}ooui`)
   );
-  // const session: ClientHttp2Session = await new Promise(
-  //   (resolve, reject) => {
-  //     const session = http2.connect("https://hailuoai.com");
-  //     session.on("connect", () => resolve(session));
-  //     session.on("error", reject);
-  //   }
-  // );
-  // console.log({
-  //   ":method": method,
-  //   ":path": `${uri}?${queryStr}`,
-  //   ":scheme": "https",
-  //   Referer: "https://hailuoai.com/",
-  //   Token: token,
-  //   ...FAKE_HEADERS,
-  //   ...(options.headers || {}),
-  //   Yy: yy,
-  //   ...data.getHeaders()
-  // });
-  // const stream = session.request({
-  //   ":method": method,
-  //   ":path": `${uri}?${queryStr}`,
-  //   ":scheme": "https",
-  //   Referer: "https://hailuoai.com/",
-  //   Token: token,
-  //   ...FAKE_HEADERS,
-  //   ...(options.headers || {}),
-  //   Yy: yy,
-  //   ...data.getHeaders()
-  // });
-  // stream.setTimeout(120000);
-  // stream.write(data.getBuffer());
-  // stream.setEncoding("utf8");
+  const session: ClientHttp2Session = await new Promise(
+    (resolve, reject) => {
+      const session = http2.connect("https://hailuoai.com");
+      session.on("connect", () => resolve(session));
+      session.on("error", reject);
+    }
+  );
   
-  console.log({
-    method,
-    url: `https://hailuoai.com${uri}?${queryStr}`,
-    data,
-    timeout: 15000,
-    validateStatus: () => true,
-    ...options,
-    headers: {
-      Referer: "https://hailuoai.com/",
-      Token: token,
-      ...FAKE_HEADERS,
-      ...(options.headers || {}),
-      Yy: yy,
-    },
-    responseType: "stream"
+  const stream = session.request({
+    ":method": method,
+    ":path": `${uri}?${queryStr}`,
+    ":scheme": "https",
+    Referer: "https://hailuoai.com/",
+    Token: token,
+    ...FAKE_HEADERS,
+    ...(options.headers || {}),
+    Yy: yy,
+    ...data.getHeaders()
   });
-  return await axios.request({
-    method,
-    url: `https://hailuoai.com${uri}?${queryStr}`,
-    data,
-    timeout: 15000,
-    validateStatus: () => true,
-    ...options,
-    headers: {
-      Referer: "https://hailuoai.com/",
-      Token: token,
-      ...FAKE_HEADERS,
-      ...(options.headers || {}),
-      Yy: yy,
-    },
-    responseType: "stream"
-  });
-  // return {
-  //   session,
-  //   stream
-  // };
+  stream.setTimeout(120000);
+  stream.setEncoding("utf8");
+  stream.end(data.getBuffer());
+
+  return {
+    session,
+    stream
+  };
 }
 
 /**
