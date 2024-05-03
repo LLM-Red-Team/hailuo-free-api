@@ -362,7 +362,7 @@ async function requestStream(
   }
   queryStr = queryStr.substring(1);
   const formData = new FormData();
-  for (let key in data) formData.append(key, data[key]);
+  for (let key in data) data[key] && formData.append(key, data[key]);
   const dataJson = `${util.md5(data.characterID)}${util.md5(
     data.msgContent.replace(/(\r\n|\n|\r)/g, "")
   )}${util.md5(data.chatID)}${util.md5(data.form ? data.form : "")}`;
