@@ -197,7 +197,7 @@ async function createCompletion(
           Referer: refConvId
             ? `https://hailuoai.com/?chat=${refConvId}`
             : "https://hailuoai.com/",
-        }
+        },
       }
     ));
 
@@ -244,6 +244,7 @@ async function createCompletionStream(
   refConvId = "",
   retryCount = 0
 ) {
+  let session: ClientHttp2Session;
   return (async () => {
     logger.info(messages);
 
@@ -260,7 +261,8 @@ async function createCompletionStream(
 
     // 请求流
     const deviceInfo = await acquireDeviceInfo(token);
-    const result = await requestStream(
+    let stream: ClientHttp2Stream;
+    ({ session, stream } = await requestStream(
       "POST",
       "/v4/api/chat/msg",
       messagesPrepare(messages, refs, refConvId),
@@ -273,42 +275,12 @@ async function createCompletionStream(
             ? `https://hailuoai.com/?chat=${refConvId}`
             : "https://hailuoai.com/",
         },
-        responseType: "stream",
       }
-    );
-
-    if (result.headers["content-type"].indexOf("text/event-stream") == -1) {
-      logger.error(
-        `Invalid response Content-Type:`,
-        result.headers["content-type"]
-      );
-      result.data.on("data", (buffer) => logger.error(buffer.toString()));
-      const transStream = new PassThrough();
-      transStream.end(
-        `data: ${JSON.stringify({
-          id: "",
-          model: MODEL_NAME,
-          object: "chat.completion.chunk",
-          choices: [
-            {
-              index: 0,
-              delta: {
-                role: "assistant",
-                content: "服务暂时不可用，第三方响应错误",
-              },
-              finish_reason: "stop",
-            },
-          ],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-          created: util.unixTimestamp(),
-        })}\n\n`
-      );
-      return transStream;
-    }
+    ));
 
     const streamStartTime = util.timestamp();
     // 创建转换流将消息格式转换为gpt兼容格式
-    return createTransStream(result.data, (convId: string) => {
+    return createTransStream(stream, (convId: string) => {
       logger.success(
         `Stream has completed transfer ${util.timestamp() - streamStartTime}ms`
       );
@@ -318,6 +290,8 @@ async function createCompletionStream(
       );
     });
   })().catch((err) => {
+    session && session.close();
+    session = null;
     if (retryCount < MAX_RETRY_COUNT) {
       logger.error(`Stream response error: ${err.stack}`);
       logger.warn(`Try again after ${RETRY_DELAY / 1000}s...`);
@@ -420,23 +394,18 @@ function messagesPrepare(messages: any[], refs: any[], refConvId: string) {
     }
     content = (
       messages.reduce((content, message) => {
-        const role = message.role
-          .replace("system", "<|sytstem|>")
-          .replace("assistant", "<|assistant|>")
-          .replace("user", "<|user|>");
         if (_.isArray(message.content)) {
           return message.content.reduce((_content, v) => {
             if (!_.isObject(v) || v["type"] != "text") return _content;
-            return _content + (`${role}\n` + v["text"] || "") + "\n";
+            return _content + (`${message.role}:${v["text"] || ""}`) + "\n";
           }, content);
         }
-        return (content += `${role}\n${message.content}\n`);
-      }, "") + "<|assistant|>\n"
+        return (content += `${message.role}:${message.content}\n`);
+      }, "") + "assistant:\n"
     )
+      .trim()
       // 移除MD图像URL避免幻觉
-      .replace(/\!\[.+\]\(.+\)/g, "")
-      // 移除临时路径避免在新会话引发幻觉
-      .replace(/\/mnt\/data\/.+/g, "");
+      .replace(/\!\[.+\]\(.+\)/g, "");
     logger.info("\n对话合并：\n" + content);
   }
 
@@ -449,9 +418,9 @@ function messagesPrepare(messages: any[], refs: any[], refConvId: string) {
     });
   return {
     characterID: CHARACTER_ID,
-    msgContent: content.trim(),
+    msgContent: content,
     chatID: refConvId || "0",
-    searchMode: "0"
+    searchMode: "0",
   };
 }
 
@@ -588,7 +557,32 @@ async function receiveStream(stream: any): Promise<any> {
         const result = _.attempt(() => JSON.parse(event.data));
         if (_.isError(result))
           throw new Error(`Stream response invalid: ${event.data}`);
-        console.log(eventName, result);
+        const { statusInfo, data: _data } = result;
+        const { code, message } = statusInfo || {};
+        if (code !== 0) throw new Error(`Stream response error: ${message}`);
+        const { messageResult } = _data || {};
+        if (eventName == "message_result" && messageResult) {
+          const { chatID, isEnd, content, extra } = messageResult;
+          // const { netSearchStatus } = extra || {};
+          // const { linkDetail } = netSearchStatus || [];
+          if(!data.id)
+            data.id = chatID;
+          const exceptCharIndex = content.indexOf("�");
+          const chunk = content.substring(
+            exceptCharIndex != -1
+              ? Math.min(
+                  data.choices[0].message.content.length,
+                  exceptCharIndex
+                )
+              : data.choices[0].message.content.length,
+            exceptCharIndex == -1 ? content.length : exceptCharIndex
+          );
+          data.choices[0].message.content += chunk;
+          // if(isEnd === 0 && linkDetail.length) {
+          //   const refContent = linkDetail.reduce((str, item) => str + (item.url ? `${item.detail || '未知来源'} - ${item.url}\n` : ''), '');
+          //   data.choices[0].message.content += `\n\n搜索结果来自：\n${refContent}`;
+          // }
+        }
       } catch (err) {
         logger.error(err);
         reject(err);
@@ -614,13 +608,6 @@ function createTransStream(stream: any, endCallback?: Function) {
   const created = util.unixTimestamp();
   // 创建转换流
   const transStream = new PassThrough();
-  let content = "";
-  let toolCall = false;
-  let codeGenerating = false;
-  let textChunkLength = 0;
-  let codeTemp = "";
-  let lastExecutionOutput = "";
-  let textOffset = 0;
   !transStream.closed &&
     transStream.write(
       `data: ${JSON.stringify({
@@ -640,139 +627,38 @@ function createTransStream(stream: any, endCallback?: Function) {
   const parser = createParser((event) => {
     try {
       if (event.type !== "event") return;
+      const eventName = event.event;
       // 解析JSON
       const result = _.attempt(() => JSON.parse(event.data));
       if (_.isError(result))
         throw new Error(`Stream response invalid: ${event.data}`);
-      if (result.status != "finish" && result.status != "intervene") {
-        const text = result.parts.reduce((str, part) => {
-          const { status, content, meta_data } = part;
-          if (!_.isArray(content)) return str;
-          const partText = content.reduce((innerStr, value) => {
-            const {
-              status: partStatus,
-              type,
-              text,
-              image,
-              code,
-              content,
-            } = value;
-            if (partStatus == "init" && textChunkLength > 0) {
-              textOffset += textChunkLength + 1;
-              textChunkLength = 0;
-              innerStr += "\n";
-            }
-            if (type == "text") {
-              if (toolCall) {
-                innerStr += "\n";
-                textOffset++;
-                toolCall = false;
-              }
-              if (partStatus == "finish") textChunkLength = text.length;
-              return innerStr + text;
-            } else if (
-              type == "quote_result" &&
-              status == "finish" &&
-              meta_data &&
-              _.isArray(meta_data.metadata_list)
-            ) {
-              const searchText =
-                meta_data.metadata_list.reduce(
-                  (meta, v) => meta + `检索 ${v.title}(${v.url}) ...`,
-                  ""
-                ) + "\n";
-              textOffset += searchText.length;
-              toolCall = true;
-              return innerStr + searchText;
-            } else if (
-              type == "image" &&
-              _.isArray(image) &&
-              status == "finish"
-            ) {
-              const imageText =
-                image.reduce(
-                  (imgs, v) =>
-                    imgs +
-                    (/^(http|https):\/\//.test(v.image_url)
-                      ? `![图像](${v.image_url || ""})`
-                      : ""),
-                  ""
-                ) + "\n";
-              textOffset += imageText.length;
-              toolCall = true;
-              return innerStr + imageText;
-            } else if (type == "code" && partStatus == "init") {
-              let codeHead = "";
-              if (!codeGenerating) {
-                codeGenerating = true;
-                codeHead = "```python\n";
-              }
-              const chunk = code.substring(codeTemp.length, code.length);
-              codeTemp += chunk;
-              textOffset += codeHead.length + chunk.length;
-              return innerStr + codeHead + chunk;
-            } else if (
-              type == "code" &&
-              partStatus == "finish" &&
-              codeGenerating
-            ) {
-              const codeFooter = "\n```\n";
-              codeGenerating = false;
-              codeTemp = "";
-              textOffset += codeFooter.length;
-              return innerStr + codeFooter;
-            } else if (
-              type == "execution_output" &&
-              _.isString(content) &&
-              partStatus == "done" &&
-              lastExecutionOutput != content
-            ) {
-              lastExecutionOutput = content;
-              textOffset += content.length + 1;
-              return innerStr + content + "\n";
-            }
-            return innerStr;
-          }, "");
-          return str + partText;
-        }, "");
-        const chunk = text.substring(content.length - textOffset, text.length);
-        if (chunk) {
-          content += chunk;
-          const data = `data: ${JSON.stringify({
-            id: result.conversation_id,
-            model: MODEL_NAME,
-            object: "chat.completion.chunk",
-            choices: [
-              { index: 0, delta: { content: chunk }, finish_reason: null },
-            ],
-            created,
-          })}\n\n`;
-          !transStream.closed && transStream.write(data);
-        }
-      } else {
+      const { statusInfo, data: _data } = result;
+      const { code, message } = statusInfo || {};
+      if (code !== 0) throw new Error(`Stream response error: ${message}`);
+      const { messageResult } = _data || {};
+      if (eventName == "message_result" && messageResult) {
+        const { chatID, isEnd, content, extra } = messageResult;
+        if(isEnd !== 0 && !content)
+          return;
+        const exceptCharIndex = content.indexOf("�");
+        const chunk = content.substring(
+          0,
+          exceptCharIndex == -1 ? content.length : exceptCharIndex
+        );
         const data = `data: ${JSON.stringify({
-          id: result.conversation_id,
+          id: chatID,
           model: MODEL_NAME,
           object: "chat.completion.chunk",
           choices: [
-            {
-              index: 0,
-              delta:
-                result.status == "intervene" &&
-                result.last_error &&
-                result.last_error.intervene_text
-                  ? { content: `\n\n${result.last_error.intervene_text}` }
-                  : {},
-              finish_reason: "stop",
-            },
+            { index: 0, delta: { content: chunk }, finish_reason: null },
           ],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
           created,
         })}\n\n`;
         !transStream.closed && transStream.write(data);
-        !transStream.closed && transStream.end("data: [DONE]\n\n");
-        content = "";
-        endCallback && endCallback(result.conversation_id);
+        if(isEnd === 0) {
+          !transStream.closed && transStream.end('data: [DONE]\n\n');
+          endCallback && endCallback();
+        }
       }
     } catch (err) {
       logger.error(err);
@@ -832,7 +718,7 @@ async function request(
   queryStr = queryStr.substring(1);
   const dataJson = JSON.stringify(data || {});
   const yy = util.md5(
-    encodeURIComponent(`${uri}?${queryStr}_${dataJson}${util.md5(unix)}ooui`)
+    encodeURIComponent(`${uri}?${queryStr}`) + `_${dataJson}${util.md5(unix)}ooui`
   );
   return await axios.request({
     method,
@@ -883,20 +769,18 @@ async function requestStream(
   const formData = new FormData();
   for (let key in data) formData.append(key, data[key]);
   const dataJson = `${util.md5(data.characterID)}${util.md5(
-    data.msgContent
+    data.msgContent.replace(/(\r\n|\n|\r)/g, "")
   )}${util.md5(data.chatID)}${util.md5("")}`;
   data = formData;
   const yy = util.md5(
-    encodeURIComponent(`${uri}?${queryStr}_${dataJson}${util.md5(unix)}ooui`)
+    encodeURIComponent(`${uri}?${queryStr}`) + `_${dataJson}${util.md5(unix)}ooui`
   );
-  const session: ClientHttp2Session = await new Promise(
-    (resolve, reject) => {
-      const session = http2.connect("https://hailuoai.com");
-      session.on("connect", () => resolve(session));
-      session.on("error", reject);
-    }
-  );
-  
+  const session: ClientHttp2Session = await new Promise((resolve, reject) => {
+    const session = http2.connect("https://hailuoai.com");
+    session.on("connect", () => resolve(session));
+    session.on("error", reject);
+  });
+
   const stream = session.request({
     ":method": method,
     ":path": `${uri}?${queryStr}`,
@@ -906,7 +790,7 @@ async function requestStream(
     ...FAKE_HEADERS,
     ...(options.headers || {}),
     Yy: yy,
-    ...data.getHeaders()
+    ...data.getHeaders(),
   });
   stream.setTimeout(120000);
   stream.setEncoding("utf8");
@@ -914,7 +798,7 @@ async function requestStream(
 
   return {
     session,
-    stream
+    stream,
   };
 }
 
