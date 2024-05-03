@@ -5,13 +5,15 @@
 ![](https://img.shields.io/github/forks/llm-red-team/hailuo-free-api.svg)
 ![](https://img.shields.io/docker/pulls/vinlic/hailuo-free-api.svg)
 
-支持高速流式输出、支持多轮对话、支持AI绘图、支持联网搜索、支持长文档解读、支持图像解析，零配置部署，多路token支持，自动清理会话痕迹。
+支持高速流式输出、支持多轮对话、支持语音合成、支持联网搜索、支持长文档解读、支持图像解析，零配置部署，多路token支持，自动清理会话痕迹。
 
 与ChatGPT接口完全兼容。
 
-还有以下六个free-api欢迎关注：
+还有以下七个free-api欢迎关注：
 
 Moonshot AI（Kimi.ai）接口转API [kimi-free-api](https://github.com/LLM-Red-Team/kimi-free-api)
+
+ZhipuAI (智谱清言) 接口转API [glm-free-api](https://github.com/LLM-Red-Team/glm-free-api)
 
 阶跃星辰 (跃问StepChat) 接口转API [step-free-api](https://github.com/LLM-Red-Team/step-free-api)
 
@@ -42,7 +44,7 @@ Moonshot AI（Kimi.ai）接口转API [kimi-free-api](https://github.com/LLM-Red-
   * [AI绘图](#AI绘图)
   * [文档解读](#文档解读)
   * [图像解析](#图像解析)
-  * [refresh_token存活检测](#refresh_token存活检测)
+  * [_token存活检测](#_token存活检测)
 * [注意事项](#注意事项)
   * [Nginx反代优化](#Nginx反代优化)
   * [Token统计](#Token统计)
@@ -50,7 +52,7 @@ Moonshot AI（Kimi.ai）接口转API [kimi-free-api](https://github.com/LLM-Red-
   
 ## 免责声明
 
-**逆向API是不稳定的，建议前往智谱AI官方 https://open.bigmodel.cn/ 付费使用API，避免封禁的风险。**
+**逆向API是不稳定的，建议前往MiniMax官方 https://www.minimaxi.com/platform 付费使用API，避免封禁的风险。**
 
 **本组织和个人不接受任何资金捐助和交易，此项目是纯粹研究交流学习性质！**
 
@@ -62,59 +64,17 @@ Moonshot AI（Kimi.ai）接口转API [kimi-free-api](https://github.com/LLM-Red-
 
 ## 在线体验
 
-此链接仅临时测试功能，只有一路并发，如果遇到异常请稍后重试，建议自行部署使用。
-
-https://udify.app/chat/Pe89TtaX3rKXM8NS
+正在准备中...
 
 ## 效果示例
 
-### 验明正身Demo
-
-![验明正身](./doc/example-1.png)
-
-### 智能体对话Demo
-
-对应智能体链接：[网抑云评论生成器](https://chatglm.cn/main/gdetail/65c046a531d3fcb034918abe)
-
-![智能体对话](./doc/example-9.png)
-
-### 结合Dify工作流Demo
-
-体验地址：https://udify.app/chat/m46YgeVLNzFh4zRs
-
-<img width="390" alt="image" src="https://github.com/LLM-Red-Team/hailuo-free-api/assets/20235341/4773b9f6-b1ca-460c-b3a7-c56bdb1f0659">
-
-### 多轮对话Demo
-
-![多轮对话](./doc/example-6.png)
-
-### AI绘图Demo
-
-![AI绘图](./doc/example-10.png)
-
-### 联网搜索Demo
-
-![联网搜索](./doc/example-2.png)
-
-### 长文档解读Demo
-
-![长文档解读](./doc/example-5.png)
-
-### 代码调用Demo
-
-![代码调用](./doc/example-12.png)
-
-### 图像解析Demo
-
-![图像解析](./doc/example-3.png)
+正在准备中...
 
 ## 接入准备
 
 从 [海螺AI](https://hailuoai.com/) 获取token
 
 进入海螺AI随便发起一个对话，然后F12打开开发者工具，从Application > LocalStorage中找到`_token`的值，这将作为Authorization的Bearer Token值：`Authorization: Bearer TOKEN`
-
-![example0](./doc/example-0.png)
 
 ### 多账号接入
 
@@ -264,21 +224,18 @@ pm2 stop hailuo-free-api
 header 需要设置 Authorization 头部：
 
 ```
-Authorization: Bearer [refresh_token]
+Authorization: Bearer [_token]
 ```
 
 请求数据：
 ```json
 {
-    // 如果使用智能体请填写智能体ID到此处，否则可以乱填
+    // model模型名称可以乱填
     "model": "hailuo",
-    // 目前多轮对话基于消息合并实现，某些场景可能导致能力下降且token最高为4096
-    // 如果您想获得原生的多轮对话体验，可以传入首轮消息获得的id，来接续上下文
-    // "conversation_id": "65f6c28546bae1f0fbb532de",
     "messages": [
         {
             "role": "user",
-            "content": "你叫什么？"
+            "content": "你是谁？"
         }
     ],
     // 如果使用SSE流请设置为true，默认false
@@ -289,8 +246,7 @@ Authorization: Bearer [refresh_token]
 响应数据：
 ```json
 {
-    // 如果想获得原生多轮对话体验，此id，你可以传入到下一轮对话的conversation_id来接续上下文
-    "id": "65f6c28546bae1f0fbb532de",
+    "id": "242830597915504644",
     "model": "hailuo",
     "object": "chat.completion",
     "choices": [
@@ -298,7 +254,7 @@ Authorization: Bearer [refresh_token]
             "index": 0,
             "message": {
                 "role": "assistant",
-                "content": "我叫智谱清言，是基于智谱 AI 公司于 2023 年训练的 ChatGLM 开发的。我的任务是针对用户的问题和要求提供适当的答复和支持。"
+                "content": "我是海螺AI，由上海稀宇科技有限公司（MiniMax）自主研发的AI助理。我可以帮助你回答各种问题，提供信息查询、生活建议、学习辅导等服务。如果你有任何问题，随时可以向我提问。"
             },
             "finish_reason": "stop"
         }
@@ -308,42 +264,78 @@ Authorization: Bearer [refresh_token]
         "completion_tokens": 1,
         "total_tokens": 2
     },
-    "created": 1710152062
+    "created": 1714751470
 }
 ```
 
-### AI绘图
+### 创建语音
 
-对话补全接口，与openai的 [images-create-api](https://platform.openai.com/docs/api-reference/images/create) 兼容。
+创建语音接口，与openai的 [audio-create-speech-api](https://platform.openai.com/docs/api-reference/audio/createSpeech) 兼容，只支持mp3格式输出。
 
-**POST /v1/images/generations**
+#### 官方发音人
+
+```
+male-botong 思远
+Podcast_girl 心悦
+boyan_new_hailuo 子轩
+female-shaonv 灵儿
+YaeMiko_hailuo 语嫣
+xiaoyi_mix_hailuo 少泽
+xiaomo_sft 芷溪
+cove_test2_hailuo 浩翔（英文）
+scarlett_hailuo 雅涵（英文）
+Leishen2_hailuo 模仿雷电将军
+Zhongli_hailuo 模仿钟离
+Paimeng_hailuo 模仿派蒙
+keli_hailuo 模仿可莉
+Hutao_hailuo 模仿胡桃
+Xionger_hailuo 模仿熊二
+Haimian_hailuo 模仿海绵宝宝
+Robot_hunter_hailuo 模仿变形金刚
+Linzhiling_hailuo 小玲玲
+huafei_hailuo 拽妃
+lingfeng_hailuo 东北er
+male_dongbei_hailuo 老铁
+Beijing_hailuo 北京er
+JayChou_hailuo JayJay
+Daniel_hailuo 潇然
+Bingjiao_zongcai_hailuo 沉韵
+female-yaoyao-hd 瑶瑶
+murong_sft 晨曦
+shangshen_sft 沐珊
+kongchen_sft 祁辰
+shenteng2_hailuo 夏洛特
+Guodegang_hailuo 郭嘚嘚
+yueyue_hailuo 小月月
+```
+
+#### 克隆发音人
+
+从F12 Network中寻找robot_custom_config请求响应data.formInfo.userVoiceList自己的克隆音色ID，格式为`puv_******************`。
+
+**POST /v1/audio/speech**
 
 header 需要设置 Authorization 头部：
 
 ```
-Authorization: Bearer [refresh_token]
+Authorization: Bearer [_token]
 ```
 
 请求数据：
 ```json
 {
-    // 如果使用智能体请填写智能体ID到此处，否则可以乱填
-    "model": "cogview-3",
-    "prompt": "一只可爱的猫"
+    // model模型名称可以乱填
+    "model": "hailuo",
+    // 语音内容，尽量不要包含指令（否则可能导致模型回答你的问题）
+    "input": "你在做什么？",
+    // 发音人ID，可以使用官方或者自己克隆的音色
+    "voice": "Podcast_girl"
 }
 ```
 
 响应数据：
-```json
-{
-    "created": 1711507449,
-    "data": [
-        {
-            "url": "https://sfile.chatglm.cn/testpath/5e56234b-34ae-593c-ba4e-3f7ba77b5768_0.png"
-        }
-    ]
-}
-```
+
+audio/mpeg 二进制数据流（mp3文件）
 
 ### 文档解读
 
@@ -354,7 +346,7 @@ Authorization: Bearer [refresh_token]
 header 需要设置 Authorization 头部：
 
 ```
-Authorization: Bearer [refresh_token]
+Authorization: Bearer [_token]
 ```
 
 请求数据：
@@ -387,7 +379,7 @@ Authorization: Bearer [refresh_token]
 响应数据：
 ```json
 {
-    "id": "cnmuo7mcp7f9hjcmihn0",
+    "id": "242835041910616068",
     "model": "hailuo",
     "object": "chat.completion",
     "choices": [
@@ -395,7 +387,7 @@ Authorization: Bearer [refresh_token]
             "index": 0,
             "message": {
                 "role": "assistant",
-                "content": "根据文档内容，我总结如下：\n\n这是一份关于希腊罗马时期的魔法咒语和仪式的文本，包含几个魔法仪式：\n\n1. 一个涉及面包、仪式场所和特定咒语的仪式，用于使某人爱上你。\n\n2. 一个针对女神赫卡忒的召唤仪式，用来折磨某人直到她自愿来到你身边。\n\n3. 一个通过念诵爱神阿芙罗狄蒂的秘密名字，连续七天进行仪式，来赢得一个美丽女子的心。\n\n4. 一个通过燃烧没药并念诵咒语，让一个女子对你产生强烈欲望的仪式。\n\n这些仪式都带有魔法和迷信色彩，使用各种咒语和象征性行为来影响人的感情和意愿。"
+                "content": "文档中包含了一系列的古代魔法仪式和咒语，这些内容似乎源自古希腊罗马时期的魔法文献，如《希腊魔法纸莎草纸》（PGM，全称为Papyri Graecae Magicae）。以下是每个文档内容的简要概述：\n\n1. 文档1中描述了一个仪式，其中包括将面包分成七小块，然后在那些被暴力杀害的地方留下这些面包块，并念诵一段咒语。这个仪式的目的是为了吸引一个特定女性的注意，让她对施法者产生强烈的感情和欲望。\n\n2. 文档2中包含了一个咒语，要求一个名为Didymos的施法者召唤一个名为Tereous的女性，通过念诵一系列的魔法名字和咒语，使她感到痛苦和渴望，直到她来到施法者身边。\n\n3. 文档3中提供了一个简单的仪式，施法者需要保持三天的纯洁，并献上乳香作为祭品，念诵一个特定的名字（NEPHERIRI），以此来吸引一个美丽的女性。\n\n4. 文档4中描述了一个使用没药的仪式，施法者在献上没药的同时念诵一段咒语，目的是让一个特定的女性对施法者产生强烈的爱慕之情，即使她正在做其他事情，也会被这种强烈的感情所占据。\n\n这些文档内容反映了古代人们对于魔法和咒语的信仰，以及他们试图通过这些仪式来影响他人情感和行为的愿望。需要注意的是，这些内容仅供学术研究和了解历史之用，现代社会中不应使用这些仪式或咒语来干预他人的自由意志。"
             },
             "finish_reason": "stop"
         }
@@ -405,7 +397,7 @@ Authorization: Bearer [refresh_token]
         "completion_tokens": 1,
         "total_tokens": 2
     },
-    "created": 100920
+    "created": 1714752530
 }
 ```
 
@@ -420,13 +412,13 @@ Authorization: Bearer [refresh_token]
 header 需要设置 Authorization 头部：
 
 ```
-Authorization: Bearer [refresh_token]
+Authorization: Bearer [_token]
 ```
 
 请求数据：
 ```json
 {
-    "model": "65c046a531d3fcb034918abe",
+    "model": "hailuo",
     "messages": [
         {
             "role": "user",
@@ -434,16 +426,17 @@ Authorization: Bearer [refresh_token]
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": "http://1255881664.vod2.myqcloud.com/6a0cd388vodbj1255881664/7b97ce1d3270835009240537095/uSfDwh6ZpB0A.png"
+                        "url": "https://ecmb.bdimg.com/tam-ogel/-1384175475_-1668929744_259_194.jpg"
                     }
                 },
                 {
                     "type": "text",
-                    "text": "图像描述了什么？"
+                    "text": "图里是什么？"
                 }
             ]
         }
     ],
+    // 如果使用SSE流请设置为true，默认false
     "stream": false
 }
 ```
@@ -451,7 +444,7 @@ Authorization: Bearer [refresh_token]
 响应数据：
 ```json
 {
-    "id": "65f6c28546bae1f0fbb532de",
+    "id": "242835404705341445",
     "model": "hailuo",
     "object": "chat.completion",
     "choices": [
@@ -459,7 +452,7 @@ Authorization: Bearer [refresh_token]
             "index": 0,
             "message": {
                 "role": "assistant",
-                "content": "图片中展示的是一个蓝色背景下的logo，具体地，左边是一个由多个蓝色的圆点组成的圆形图案，右边是“智谱·AI”四个字，字体颜色为蓝色。"
+                "content": "图里是“海螺AI”的标识。"
             },
             "finish_reason": "stop"
         }
@@ -469,13 +462,13 @@ Authorization: Bearer [refresh_token]
         "completion_tokens": 1,
         "total_tokens": 2
     },
-    "created": 1710670469
+    "created": 1714752616
 }
 ```
 
-### refresh_token存活检测
+### _token存活检测
 
-检测refresh_token是否存活，如果存活live未true，否则为false，请不要频繁（小于10分钟）调用此接口。
+检测_token是否存活，如果存活live未true，否则为false，请不要频繁（小于10分钟）调用此接口。
 
 **POST /token/check**
 
