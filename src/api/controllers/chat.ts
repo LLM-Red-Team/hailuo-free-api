@@ -242,7 +242,7 @@ async function createRepeatCompletion(
     ));
 
     // 接收流为输出文本
-    const answer = await receiveStream(model, stream);
+    const answer = await receiveStream(model, stream, true);
     session.close();
 
     return answer;
@@ -387,7 +387,7 @@ function messagesPrepare(
  * @param model 模型名称
  * @param stream 消息流
  */
-async function receiveStream(model: string, stream: any): Promise<any> {
+async function receiveStream(model: string, stream: any, message_id_required?: boolean): Promise<any> {
   return new Promise((resolve, reject) => {
     // 消息初始化
     const data = {
@@ -403,7 +403,7 @@ async function receiveStream(model: string, stream: any): Promise<any> {
       ],
       usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
       created: util.unixTimestamp(),
-      message_id: "",
+      message_id: message_id_required ? "" : undefined,
     };
     const parser = createParser((event) => {
       try {
@@ -422,7 +422,7 @@ async function receiveStream(model: string, stream: any): Promise<any> {
           // const { netSearchStatus } = extra || {};
           // const { linkDetail } = netSearchStatus || [];
           if (!data.id) data.id = chatID;
-          if (!data.message_id) data.message_id = msgID;
+          if (message_id_required && !data.message_id) data.message_id = msgID;
           const exceptCharIndex = content.indexOf("�");
           const chunk = content.substring(
             exceptCharIndex != -1
