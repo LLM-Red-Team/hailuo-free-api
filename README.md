@@ -64,7 +64,9 @@ ZhipuAI (智谱清言) 接口转API [glm-free-api](https://github.com/LLM-Red-Te
 
 ## 在线体验
 
-正在准备中...
+此链接仅临时测试功能，只有一路并发，如果遇到异常请稍后重试，建议自行部署使用。
+
+https://udify.app/chat/uqBly3aW1LTwzzb3
 
 ## 效果示例
 
