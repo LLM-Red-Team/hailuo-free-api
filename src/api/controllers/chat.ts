@@ -369,15 +369,18 @@ function messagesPrepare(
     msgContent: content,
     chatID: refConvId || "0",
     searchMode: "0",
-    form: refs.length > 0 ? JSON.stringify([
-      ...refs.map((item) => ({
-        name: "",
-        formType: item.fileType,
-        content: item.filename,
-        fileID: item.fileId
-      })),
-      { name: "", formType: 1, content },
-    ]) : undefined,
+    form:
+      refs.length > 0
+        ? JSON.stringify([
+            ...refs.map((item) => ({
+              name: "",
+              formType: item.fileType,
+              content: item.filename,
+              fileID: item.fileId,
+            })),
+            { name: "", formType: 1, content },
+          ])
+        : undefined,
   };
 }
 
@@ -387,7 +390,11 @@ function messagesPrepare(
  * @param model 模型名称
  * @param stream 消息流
  */
-async function receiveStream(model: string, stream: any, message_id_required?: boolean): Promise<any> {
+async function receiveStream(
+  model: string,
+  stream: any,
+  message_id_required?: boolean
+): Promise<any> {
   return new Promise((resolve, reject) => {
     // 消息初始化
     const data = {
@@ -465,6 +472,7 @@ function createTransStream(model: string, stream: any, endCallback?: Function) {
   const created = util.unixTimestamp();
   // 创建转换流
   const transStream = new PassThrough();
+  let content = "";
   !transStream.closed &&
     transStream.write(
       `data: ${JSON.stringify({
@@ -494,13 +502,16 @@ function createTransStream(model: string, stream: any, endCallback?: Function) {
       if (code !== 0) throw new Error(`Stream response error: ${message}`);
       const { messageResult } = _data || {};
       if (eventName == "message_result" && messageResult) {
-        const { chatID, isEnd, content, extra } = messageResult;
-        if (isEnd !== 0 && !content) return;
-        const exceptCharIndex = content.indexOf("�");
-        const chunk = content.substring(
-          0,
-          exceptCharIndex == -1 ? content.length : exceptCharIndex
+        const { chatID, isEnd, content: text, extra } = messageResult;
+        if (isEnd !== 0 && !text) return;
+        const exceptCharIndex = text.indexOf("�");
+        const chunk = text.substring(
+          exceptCharIndex != -1
+            ? Math.min(content.length, exceptCharIndex)
+            : content.length,
+          exceptCharIndex == -1 ? text.length : exceptCharIndex
         );
+        content += chunk;
         const data = `data: ${JSON.stringify({
           id: chatID,
           model,
