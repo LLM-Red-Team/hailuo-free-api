@@ -30,7 +30,7 @@ async function createSpeech(
 
   const deviceInfo = await core.acquireDeviceInfo(token);
 
-  const audioUrl = await voiceLock.acquire(token, async () => {
+  const audioUrls = await voiceLock.acquire(token, async () => {
     // 请求切换发音人
     const result = await core.request(
       "POST",
@@ -59,26 +59,34 @@ async function createSpeech(
       );
       ({ requestStatus, result: audioUrls } = core.checkResult(result));
     }
-    return audioUrls[0];
+    return audioUrls;
   });
 
   // 移除对话
   await chat.removeConversation(convId, token);
 
-  if (!audioUrl) throw new Error("语音未生成");
-  
+  if (audioUrls.length == 0) throw new Error("语音未生成");
+  console.log(audioUrls);
+
   // 请求下载流
-  const downloadResult = await axios.get(audioUrl, {
-    headers: {
-      Referer: "https://hailuoai.com/",
-    },
-    responseType: "stream",
-  });
-  if (downloadResult.status != 200)
-    throw new Error(
-      `语音下载失败：[${downloadResult.status}]${downloadResult.statusText}`
-    );
-  return downloadResult.data;
+  const downloadResults = await Promise.all(
+    audioUrls.map((url) =>
+      axios.get(url, {
+        headers: {
+          Referer: "https://hailuoai.com/",
+        },
+        timeout: 30000,
+        responseType: "arraybuffer",
+      })
+    )
+  );
+  let audioBuffer = Buffer.from([]);
+  for (let result of downloadResults) {
+    if (result.status != 200)
+      throw new Error(`语音下载失败：[${result.status}]${result.statusText}`);
+    audioBuffer = Buffer.concat([audioBuffer, result.data]);
+  }
+  return audioBuffer;
 }
 
 export default {
