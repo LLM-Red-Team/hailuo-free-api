@@ -13,7 +13,7 @@ const MODEL_NAME = "hailuo";
 // 角色ID
 const CHARACTER_ID = "1";
 // 最大重试次数
-const MAX_RETRY_COUNT = 0;
+const MAX_RETRY_COUNT = 2;
 // 重试延迟
 const RETRY_DELAY = 5000;
 
@@ -472,6 +472,7 @@ function createTransStream(model: string, stream: any, endCallback?: Function) {
   const created = util.unixTimestamp();
   // 创建转换流
   const transStream = new PassThrough();
+  let convId = "";
   let content = "";
   !transStream.closed &&
     transStream.write(
@@ -504,6 +505,7 @@ function createTransStream(model: string, stream: any, endCallback?: Function) {
       if (eventName == "message_result" && messageResult) {
         const { chatID, isEnd, content: text, extra } = messageResult;
         if (isEnd !== 0 && !text) return;
+        if (!convId) convId = chatID;
         const exceptCharIndex = text.indexOf("�");
         const chunk = text.substring(
           exceptCharIndex != -1
@@ -513,11 +515,15 @@ function createTransStream(model: string, stream: any, endCallback?: Function) {
         );
         content += chunk;
         const data = `data: ${JSON.stringify({
-          id: chatID,
+          id: convId,
           model,
           object: "chat.completion.chunk",
           choices: [
-            { index: 0, delta: { content: chunk }, finish_reason: null },
+            {
+              index: 0,
+              delta: { content: chunk },
+              finish_reason: isEnd === 0 ? "stop" : null,
+            },
           ],
           created,
         })}\n\n`;
@@ -529,7 +535,26 @@ function createTransStream(model: string, stream: any, endCallback?: Function) {
       }
     } catch (err) {
       logger.error(err);
-      !transStream.closed && transStream.end("\n\n");
+      if (!transStream.closed) {
+        transStream.write(
+          `data: ${JSON.stringify({
+            id: convId,
+            model,
+            object: "chat.completion.chunk",
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  content: err.message.replace("Stream response error: ", ""),
+                },
+                finish_reason: "stop",
+              },
+            ],
+            created,
+          })}\n\n`
+        );
+        transStream.end("data: [DONE]\n\n");
+      }
     }
   });
   // 将流数据喂给SSE转换器

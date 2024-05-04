@@ -391,7 +391,6 @@ async function requestStream(
   stream.setTimeout(120000);
   stream.setEncoding("utf8");
   stream.end(data.getBuffer());
-
   return {
     session,
     stream,
