@@ -66,7 +66,6 @@ async function createSpeech(
   await chat.removeConversation(convId, token);
 
   if (audioUrls.length == 0) throw new Error("语音未生成");
-  console.log(audioUrls);
 
   // 请求下载流
   const downloadResults = await Promise.all(
