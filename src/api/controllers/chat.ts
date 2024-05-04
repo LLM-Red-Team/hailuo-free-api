@@ -228,7 +228,7 @@ async function createRepeatCompletion(
       messagesPrepare([
         {
           role: "user",
-          content: `完整复述以下内容，不要进行任何修改，也不需要进行任何解释。\n<${content}>`,
+          content: `完整复述以下内容，不要进行任何修改，也不需要进行任何解释，输出结果使用【】包裹。\n【${content}。】`,
         },
       ]),
       token,
