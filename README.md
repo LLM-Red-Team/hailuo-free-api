@@ -31,7 +31,6 @@ ZhipuAI (智谱清言) 接口转API [glm-free-api](https://github.com/LLM-Red-Te
 * [在线体验](#在线体验)
 * [效果示例](#效果示例)
 * [接入准备](#接入准备)
-  * [智能体接入](#智能体接入)
   * [多账号接入](#多账号接入)
 * [Docker部署](#Docker部署)
   * [Docker-compose部署](#Docker-compose部署)
@@ -354,7 +353,7 @@ Authorization: Bearer [_token]
 请求数据：
 ```json
 {
-    // 如果使用智能体请填写智能体ID到此处，否则可以乱填
+    // model模型名称可以乱填
     "model": "hailuo",
     "messages": [
         {
