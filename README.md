@@ -69,13 +69,37 @@ https://udify.app/chat/uqBly3aW1LTwzzb3
 
 ## 效果示例
 
-正在准备中...
+### 验明正身Demo
+
+![验明正身](./doc/example-1.png)
+
+### 语音合成Demo
+
+![语音合成](./doc/example-2.png)
+
+### 多轮对话Demo
+
+![多轮对话](./doc/example-3.png)
+
+### 联网搜索Demo
+
+![联网搜索](./doc/example-4.png)
+
+### 长文档解读Demo
+
+![长文档解读](./doc/example-5.png)
+
+### 图像解析Demo
+
+![图像解析](./doc/example-6.png)
 
 ## 接入准备
 
 从 [海螺AI](https://hailuoai.com/) 获取token
 
 进入海螺AI随便发起一个对话，然后F12打开开发者工具，从Application > LocalStorage中找到`_token`的值，这将作为Authorization的Bearer Token值：`Authorization: Bearer TOKEN`
+
+![获取_token](./doc/example-0.png)
 
 ### 多账号接入
 
