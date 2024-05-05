@@ -13,7 +13,7 @@ const MODEL_NAME = "hailuo";
 // 角色ID
 const CHARACTER_ID = "1";
 // 最大重试次数
-const MAX_RETRY_COUNT = 2;
+const MAX_RETRY_COUNT = 3;
 // 重试延迟
 const RETRY_DELAY = 5000;
 
