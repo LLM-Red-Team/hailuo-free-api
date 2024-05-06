@@ -15,6 +15,18 @@ const voiceToModelIndex = {
     "shimmer": 5
 };
 
+const tem_replace_audio_model = [
+    "male-botong",
+    "Podcast_girl",
+    "boyan_new_hailuo",
+    "female-shaonv",
+    "YaeMiko_hailuo",
+    "xiaoyi_mix_hailuo"
+];
+
+const REPLACE_AUDIO_MODEL = JSON.parse(process.env.REPLACE_AUDIO_MODEL
+    || JSON.stringify(tem_replace_audio_model));
+
 export default {
 
     prefix: '/v1/audio',
@@ -31,9 +43,7 @@ export default {
             // 随机挑选一个token
             const token = _.sample(tokens);
             let { model, input, voice } = request.body;
-            logger.info(`请求model: ${model}, input: ${input}, voice: ${voice}`);
             if (voice in voiceToModelIndex) {
-                const REPLACE_AUDIO_MODEL = JSON.parse(process.env.REPLACE_AUDIO_MODEL);
                 voice = (
                     voiceToModelIndex[voice] >= 0 && voiceToModelIndex[voice] < REPLACE_AUDIO_MODEL.length
                 )
@@ -48,7 +58,5 @@ export default {
                 }
             });
         }
-
     }
-
 }
