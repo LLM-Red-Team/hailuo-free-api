@@ -5,6 +5,15 @@ import Response from '@/lib/response/Response.ts';
 import audio from '@/api/controllers/audio.ts';
 import core from '../controllers/core.ts';
 
+const voiceToModelIndex = {
+    "alloy": 0,
+    "echo": 1,
+    "fable": 2,
+    "onyx": 3,
+    "nova": 4,
+    "shimmer": 5
+};
+
 export default {
 
     prefix: '/v1/audio',
@@ -20,7 +29,10 @@ export default {
             const tokens = core.tokenSplit(request.headers.authorization);
             // 随机挑选一个token
             const token = _.sample(tokens);
-            const { model, input, voice } = request.body;
+            let { model, input, voice } = request.body;
+            if (voice in voiceToModelIndex){
+                voice = process.env.REPLACE_AUDIO_MODEL[voiceToModelIndex[voice]];
+            }
             const stream = await audio.createSpeech(model, input, voice, token);
             return new Response(stream, {
                 headers: {
