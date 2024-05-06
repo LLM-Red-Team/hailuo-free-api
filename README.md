@@ -41,6 +41,8 @@ ZhipuAI (智谱清言) 接口转API [glm-free-api](https://github.com/LLM-Red-Te
 * [接口列表](#接口列表)
   * [对话补全](#对话补全)
   * [创建语音](#创建语音)
+    * [官方发音人](#官方发音人)
+    * [克隆发音人](#克隆发音人)
   * [文档解读](#文档解读)
   * [图像解析](#图像解析)
   * [_token存活检测](#_token存活检测)
@@ -300,20 +302,20 @@ Authorization: Bearer [_token]
 #### 官方发音人
 
 ```
-male-botong 思远
-Podcast_girl 心悦
-boyan_new_hailuo 子轩
-female-shaonv 灵儿
-YaeMiko_hailuo 语嫣
-xiaoyi_mix_hailuo 少泽
-xiaomo_sft 芷溪
+male-botong 思远 [兼容 tts-1 alloy]
+Podcast_girl 心悦 [兼容 tts-1 echo]
+boyan_new_hailuo 子轩 [兼容 tts-1 fable]
+female-shaonv 灵儿 [兼容 tts-1 onyx]
+YaeMiko_hailuo 语嫣 [兼容 tts-1 nova]
+xiaoyi_mix_hailuo 少泽 [兼容 tts-1 shimmer]
+xiaomo_sft 芷溪 [兼容 tts-1-hd alloy]
 cove_test2_hailuo 浩翔（英文）
 scarlett_hailuo 雅涵（英文）
-Leishen2_hailuo 模仿雷电将军
-Zhongli_hailuo 模仿钟离
-Paimeng_hailuo 模仿派蒙
-keli_hailuo 模仿可莉
-Hutao_hailuo 模仿胡桃
+Leishen2_hailuo 模仿雷电将军 [兼容 tts-1-hd echo]
+Zhongli_hailuo 模仿钟离 [兼容 tts-1-hd fable]
+Paimeng_hailuo 模仿派蒙 [兼容 tts-1-hd onyx]
+keli_hailuo 模仿可莉 [兼容 tts-1-hd nova]
+Hutao_hailuo 模仿胡桃 [兼容 tts-1-hd shimmer]
 Xionger_hailuo 模仿熊二
 Haimian_hailuo 模仿海绵宝宝
 Robot_hunter_hailuo 模仿变形金刚
