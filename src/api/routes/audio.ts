@@ -32,8 +32,13 @@ export default {
             const token = _.sample(tokens);
             let { model, input, voice } = request.body;
             logger.info(`请求model: ${model}, input: ${input}, voice: ${voice}`);
-            if (voice in voiceToModelIndex){
-                voice = process.env.REPLACE_AUDIO_MODEL[voiceToModelIndex[voice]];
+            if (voice in voiceToModelIndex) {
+                const REPLACE_AUDIO_MODEL = JSON.parse(process.env.REPLACE_AUDIO_MODEL);
+                voice = (
+                    voiceToModelIndex[voice] >= 0 && voiceToModelIndex[voice] < REPLACE_AUDIO_MODEL.length
+                )
+                    ? REPLACE_AUDIO_MODEL[voiceToModelIndex[voice]]
+                    : "male-botong";
                 logger.info(`请求voice切换为: ${voice}`);
             }
             const stream = await audio.createSpeech(model, input, voice, token);
