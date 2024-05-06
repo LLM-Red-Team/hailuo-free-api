@@ -1,7 +1,6 @@
 import { PassThrough } from "stream";
 import { ClientHttp2Session, ClientHttp2Stream } from "http2";
 import _ from "lodash";
-import AsyncLock from "async-lock";
 
 import { createParser } from "eventsource-parser";
 import core from "./core.ts";
