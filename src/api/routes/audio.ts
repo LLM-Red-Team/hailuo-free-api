@@ -4,6 +4,7 @@ import Request from '@/lib/request/Request.ts';
 import Response from '@/lib/response/Response.ts';
 import audio from '@/api/controllers/audio.ts';
 import core from '../controllers/core.ts';
+import logger from "@/lib/logger.ts";
 
 const voiceToModelIndex = {
     "alloy": 0,
@@ -32,6 +33,7 @@ export default {
             let { model, input, voice } = request.body;
             if (voice in voiceToModelIndex){
                 voice = process.env.REPLACE_AUDIO_MODEL[voiceToModelIndex[voice]];
+                logger.info(`请求voice切换为: ${voice}`);
             }
             const stream = await audio.createSpeech(model, input, voice, token);
             return new Response(stream, {
