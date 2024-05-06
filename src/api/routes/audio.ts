@@ -31,6 +31,7 @@ export default {
             // 随机挑选一个token
             const token = _.sample(tokens);
             let { model, input, voice } = request.body;
+            logger.info(`请求model: ${model}, input: ${input}, voice: ${voice}`);
             if (voice in voiceToModelIndex){
                 voice = process.env.REPLACE_AUDIO_MODEL[voiceToModelIndex[voice]];
                 logger.info(`请求voice切换为: ${voice}`);
