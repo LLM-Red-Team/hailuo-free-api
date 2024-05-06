@@ -338,6 +338,21 @@ yueyue_hailuo 小月月
 
 从F12 Network中寻找robot_custom_config请求响应data.formInfo.userVoiceList自己的克隆音色ID，格式为`puv_******************`。
 
+#### 语音环境变量
+
+```
+// 环境变量 REPLACE_AUDIO_MODEL 用于适配OpenAI的tts发声角色。
+// 每个数组元素代表一个特定的模型，用于重定向相应的OpenAI的tts发声角色。
+REPLACE_AUDIO_MODEL="[
+    "model1",  // 重定向alloy
+    "model2",  // 重定向echo
+    "model3",  // 重定向fable
+    "model4",  // 重定向onyx
+    "model5",  // 重定向nova
+    "model6"   // 重定向shimmer
+]";
+```
+
 **POST /v1/audio/speech**
 
 header 需要设置 Authorization 头部：
