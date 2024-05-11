@@ -7,9 +7,6 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    
-    env:
-      VERSION: ${{ github.event.release.tag_name }}
 
     steps:
     - name: Checkout repository
@@ -17,7 +14,7 @@ jobs:
 
     - name: Validate version
       run: |
-        echo "Validating version $VERSION"
+        echo "Validating version ${{ github.event.release.tag_name }}"
       if: github.event_name == 'release'
 
     - name: Trigger Docker build workflow
@@ -28,5 +25,5 @@ jobs:
             owner: context.repo.owner,
             repo: context.repo.repo,
             workflow_id: 'docker-image.yml',
-            ref: $VERSION,
+            ref: context.event.release.tag_name,
           })
