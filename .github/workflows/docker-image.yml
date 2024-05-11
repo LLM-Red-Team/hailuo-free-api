@@ -2,6 +2,11 @@ name: Build and Push Docker Image
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The Docker image tag to build and push'
+        required: true
+        default: 'latest'
   
 jobs:
   build-and-push:
@@ -32,12 +37,7 @@ jobs:
       - name: Set tag name
         id: tag_name
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-              echo "::set-output name=tag::${GITHUB_REF#refs/tags/}"
-            else
-              echo "::set-output name=tag::latest"
-            fi
+          echo "::set-output name=tag::${{ github.event.inputs.tag }}"
 
       - name: Set Docker repository names
         id: repo-set
@@ -59,3 +59,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
