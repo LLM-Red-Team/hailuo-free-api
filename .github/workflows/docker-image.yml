@@ -1,14 +1,12 @@
 name: Build and Push Docker Image
 
 on:
-  release:
-    types: [created]
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag Name'
-        required: true
-
+      ref:
+        description: 'Git reference to checkout (branch or SHA)'
+        required: false
+        default: 'latest'
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -35,20 +33,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set tag name
-        id: tag_name
+      - name: Set ref name
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "::set-output name=tag::${GITHUB_REF#refs/tags/}"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "::set-output name=tag::${{ github.event.inputs.tag }}"
-          fi
+          REF_NAME=$(echo $GITHUB_REF | sed 's|refs/tags/||')
+          echo "REF_NAME=$REF_NAME" >> $GITHUB_ENV
 
       - name: Set Docker repository names
-        id: repo-set
         run: |
-          echo "::set-output name=repo_all::$(echo "${{ github.repository }}" | awk '{print tolower($0)}')"
-          echo "::set-output name=repo_name::$(echo "${{ github.event.repository.name }}" | awk '{print tolower($0)}')"
+          echo "repo_all=$(echo "${{ github.repository }}" | awk '{print tolower($0)}')" >> $GITHUB_ENV
+          echo "repo_name=$(echo "${{ github.event.repository.name }}" | awk '{print tolower($0)}')" >> $GITHUB_ENV
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
@@ -57,10 +50,10 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            vinlic/${{ steps.repo-set.outputs.repo_name }}:${{ steps.tag_name.outputs.tag }}
-            vinlic/${{ steps.repo-set.outputs.repo_name }}:latest
-            ghcr.io/${{ steps.repo-set.outputs.repo_all }}:${{ steps.tag_name.outputs.tag }}
-            ghcr.io/${{ steps.repo-set.outputs.repo_all }}:latest
+            vinlic/${{ env.repo_name }}:${{ env.REF_NAME }}
+            vinlic/${{ env.repo_name }}:latest
+            ghcr.io/${{ env.repo_all }}:${{ env.REF_NAME }}
+            ghcr.io/${{ env.repo_all }}:latest
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
