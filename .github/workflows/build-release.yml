@@ -8,9 +8,6 @@ on:
       tag:
         description: 'Tag Name'
         required: true
-  push:
-    branches:
-      - master
 
 jobs:
   release:
