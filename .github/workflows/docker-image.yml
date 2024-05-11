@@ -36,7 +36,7 @@ jobs:
       - name: Set ref name
         id: tag_name
         run: |
-          echo "::set-output name=ref::${GITHUB_REF#refs/heads/}"
+          echo "ref=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
 
       - name: Set Docker repository names
         id: repo-set
@@ -51,9 +51,9 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            vinlic/${{ steps.repo-set.outputs.repo_name }}:${{ steps.tag_name.outputs.ref }}
+            vinlic/${{ steps.repo-set.outputs.repo_name }}:$ref
             vinlic/${{ steps.repo-set.outputs.repo_name }}:latest
-            ghcr.io/${{ steps.repo-set.outputs.repo_all }}:${{ steps.tag_name.outputs.ref }}
+            ghcr.io/${{ steps.repo-set.outputs.repo_all }}:$ref
             ghcr.io/${{ steps.repo-set.outputs.repo_all }}:latest
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
