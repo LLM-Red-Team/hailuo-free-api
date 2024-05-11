@@ -2,13 +2,7 @@ name: Build and Push Docker Image
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-      - dev
-    tags:
-      - v*
-
+  
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -38,13 +32,12 @@ jobs:
       - name: Set tag name
         id: tag_name
         run: |
-          if [ "${{ github.event_name }}" = "release" ]; then
-            echo "::set-output name=tag::${GITHUB_REF#refs/tags/}"
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "::set-output name=tag::${{ github.event.inputs.tag }}"
-          elif [ "${{ github.event_name }}" = "push" ]; then
-            echo "::set-output name=tag::latest"
-          fi
+          if [ "${{ github.event_name }}" = "push" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              echo "::set-output name=tag::${GITHUB_REF#refs/tags/}"
+            else
+              echo "::set-output name=tag::latest"
+            fi
 
       - name: Set Docker repository names
         id: repo-set
