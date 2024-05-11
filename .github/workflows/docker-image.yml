@@ -10,8 +10,7 @@ on:
         required: true
   push:
     branches:
-      - main
-      - dev
+      - master
     tags:
       - v*
 
