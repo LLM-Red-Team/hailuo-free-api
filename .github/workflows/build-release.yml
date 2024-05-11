@@ -33,6 +33,6 @@ jobs:
           github.rest.actions.createWorkflowDispatch({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            workflow_id: 'docker-build.yml',
+            workflow_id: 'docker-image.yml',
             ref: 'v${{ steps.get_version.outputs.version }}',
           })
