@@ -8,6 +8,12 @@ on:
       tag:
         description: 'Tag Name'
         required: true
+  push:
+    branches:
+      - main
+      - dev
+    tags:
+      - v*
 
 jobs:
   build-and-push:
