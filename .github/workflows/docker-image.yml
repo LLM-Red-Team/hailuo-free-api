@@ -5,7 +5,7 @@ on:
     inputs:
       ref:
         description: 'Git reference to checkout (branch or SHA)'
-        required: true
+        required: false
         default: 'latest'
 jobs:
   build-and-push:
@@ -36,7 +36,7 @@ jobs:
       - name: Set ref name
         id: tag_name
         run: |
-          echo "::set-output name=ref::${{ github.event.inputs.ref }}"
+          echo "::set-output name=ref::${GITHUB_REF#refs/heads/}"
 
       - name: Set Docker repository names
         id: repo-set
