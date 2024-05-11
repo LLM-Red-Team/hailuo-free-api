@@ -3,14 +3,10 @@ name: Build and Push Docker Image
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'The Docker image tag to build and push'
-        required: true
-        default: 'latest'
       ref:
         description: 'Git reference to checkout (branch or SHA)'
         required: false
-        default: ''
+        default: 'latest'
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -40,7 +36,7 @@ jobs:
       - name: Set tag name
         id: tag_name
         run: |
-          echo "::set-output name=tag::${{ github.event.inputs.tag }}"
+          echo "::set-output name=ref::${{ github.event.inputs.ref }}"
 
       - name: Set Docker repository names
         id: repo-set
@@ -55,9 +51,9 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            vinlic/${{ steps.repo-set.outputs.repo_name }}:${{ steps.tag_name.outputs.tag }}
+            vinlic/${{ steps.repo-set.outputs.repo_name }}:${{ steps.tag_name.outputs.ref }}
             vinlic/${{ steps.repo-set.outputs.repo_name }}:latest
-            ghcr.io/${{ steps.repo-set.outputs.repo_all }}:${{ steps.tag_name.outputs.tag }}
+            ghcr.io/${{ steps.repo-set.outputs.repo_all }}:${{ steps.tag_name.outputs.ref }}
             ghcr.io/${{ steps.repo-set.outputs.repo_all }}:latest
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
