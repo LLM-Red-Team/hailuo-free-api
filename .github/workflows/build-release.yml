@@ -20,7 +20,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo
             });
-            return response.data.tag_name; // This gets the tag name of the latest release
+            return response.data.tag_name;
 
       - name: Use latest release tag
         run: |
