@@ -22,8 +22,8 @@ jobs:
       with:
         script: |
           github.rest.actions.createWorkflowDispatch({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
+            owner: github.context.repo.owner,
+            repo: github.context.repo.repo,
             workflow_id: 'docker-image.yml',
-            ref: context.event.release.tag_name,
+            ref: github.event.release.tag_name,
           })
