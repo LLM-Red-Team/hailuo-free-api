@@ -1,29 +1,27 @@
-name: Release
+name: Get Latest Release Info
 
 on:
-  release:
-    types: [created]
+  workflow_dispatch:
 
 jobs:
-  release:
+  get-release:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
 
-    - name: Validate version
-      run: |
-        echo "Validating version ${{ github.event.release.tag_name }}"
-      if: github.event_name == 'release'
-
-    - name: Trigger Docker build workflow
+    - name: Get latest release
+      id: latest-release
       uses: actions/github-script@v7
       with:
         script: |
-          github.rest.actions.createWorkflowDispatch({
+          const release = await github.rest.repos.getLatestRelease({
             owner: context.repo.owner,
-            repo: context.repo.repo,
-            workflow_id: 'docker-image.yml',
-            ref: github.event.release.tag_name,
-          })
+            repo: context.repo.repo
+          });
+          return release.data;
+
+    - name: Print release version
+      run: |
+        echo "The latest release version is ${{ steps.latest-release.outputs.tag_name }}"
