@@ -7,7 +7,10 @@ on:
         description: 'The Docker image tag to build and push'
         required: true
         default: 'latest'
-  
+      ref:
+        description: 'Git reference to checkout (branch or SHA)'
+        required: false
+        default: ''
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
