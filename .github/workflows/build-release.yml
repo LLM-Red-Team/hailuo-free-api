@@ -3,32 +3,22 @@ name: Release
 on:
   release:
     types: [created]
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag Name'
-        required: true
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    
+    env:
+      VERSION: ${{ github.event.release.tag_name }}
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
 
-    - name: Check for changes in package.json
+    - name: Validate version
       run: |
-        git diff --cached --diff-filter=d package.json || {
-          echo "No changes to package.json"
-          exit 1
-        }
-
-    - name: Get version number from package.json
-      id: get_version
-      run: |
-        VERSION=$(jq -r '.version' package.json)
-        echo "::set-output name=version::$VERSION"
+        echo "Validating version $VERSION"
+      if: github.event_name == 'release'
 
     - name: Trigger Docker build workflow
       uses: actions/github-script@v7
@@ -38,5 +28,5 @@ jobs:
             owner: context.repo.owner,
             repo: context.repo.repo,
             workflow_id: 'docker-image.yml',
-            ref: '${{ steps.get_version.outputs.version }}',
+            ref: $VERSION,
           })
