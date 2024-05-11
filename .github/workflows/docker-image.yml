@@ -5,7 +5,7 @@ on:
     inputs:
       ref:
         description: 'Git reference to checkout (branch or SHA)'
-        required: false
+        required: true
         default: 'latest'
 jobs:
   build-and-push:
@@ -33,7 +33,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set tag name
+      - name: Set ref name
         id: tag_name
         run: |
           echo "::set-output name=ref::${{ github.event.inputs.ref }}"
