@@ -22,6 +22,16 @@ export default {
                         "id": "abab5.5-chat",
                         "object": "model",
                         "owned_by": "hailuo-free-api"
+                    },
+                    {
+                        "id": "abab-v1",
+                        "object": "model",
+                        "owned_by": "hailuo-free-api"
+                    },
+                    {
+                        "id": "abab-v1-vision",
+                        "object": "model",
+                        "owned_by": "hailuo-free-api"
                     }
                 ]
             };
