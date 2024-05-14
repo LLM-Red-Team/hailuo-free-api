@@ -43,6 +43,7 @@ ZhipuAI (智谱清言) 接口转API [glm-free-api](https://github.com/LLM-Red-Te
   * [创建语音](#创建语音)
     * [官方发音人](#官方发音人)
     * [克隆发音人](#克隆发音人)
+    * [自定义发音人映射](#自定义发音人映射)
   * [文档解读](#文档解读)
   * [图像解析](#图像解析)
   * [_token存活检测](#_token存活检测)
@@ -340,19 +341,24 @@ yueyue_hailuo 小月月
 
 从F12 Network中寻找robot_custom_config请求响应data.formInfo.userVoiceList自己的克隆音色ID，格式为`puv_******************`。
 
-#### 语音环境变量
+#### 自定义发音人映射
+
+请在docker启动或系统中配置 `REPLACE_AUDIO_MODEL` 环境变量用于映射自定义发音人到openai的发音人模型，每个发音人使用`,`逗号隔开。
+
+映射的顺序为：alloy,echo,fable,onyx,nova,shimmer，目前可以定义6个映射。
+
+映射示例：
+
+Podcast_girl -> alloy
+
+yueyue_hailuo -> echo
+
+keli_hailuo -> fable
+
+以上映射关系的环境配置如下所示：
 
 ```
-// 环境变量 REPLACE_AUDIO_MODEL 用于适配OpenAI的tts发声角色。
-// 每个数组元素代表一个特定的模型，用于重定向相应的OpenAI的tts发声角色。
-REPLACE_AUDIO_MODEL="[
-    "model1",  // 重定向alloy
-    "model2",  // 重定向echo
-    "model3",  // 重定向fable
-    "model4",  // 重定向onyx
-    "model5",  // 重定向nova
-    "model6"   // 重定向shimmer
-]";
+REPLACE_AUDIO_MODEL="Podcast_girl,yueyue_hailuo,keli_hailuo";
 ```
 
 **POST /v1/audio/speech**
