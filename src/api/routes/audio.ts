@@ -3,8 +3,13 @@ import _ from 'lodash';
 import Request from '@/lib/request/Request.ts';
 import Response from '@/lib/response/Response.ts';
 import audio from '@/api/controllers/audio.ts';
+import environment from '@/lib/environment.ts';
 import core from '../controllers/core.ts';
 import logger from "@/lib/logger.ts";
+
+const {
+    REPLACE_AUDIO_MODEL: REPLACE_AUDIO_MODEL_ENV
+} = environment.envVars;
 
 const voiceToModelIndex = {
     "alloy": 0,
@@ -15,7 +20,7 @@ const voiceToModelIndex = {
     "shimmer": 5
 };
 
-const tem_replace_audio_model = [
+const REPLACE_AUDIO_MODEL = REPLACE_AUDIO_MODEL_ENV ? REPLACE_AUDIO_MODEL_ENV.split(',').map(v => v.trim()) : [
     "male-botong",
     "Podcast_girl",
     "boyan_new_hailuo",
@@ -23,9 +28,6 @@ const tem_replace_audio_model = [
     "YaeMiko_hailuo",
     "xiaoyi_mix_hailuo"
 ];
-
-const REPLACE_AUDIO_MODEL = JSON.parse(process.env.REPLACE_AUDIO_MODEL
-    || JSON.stringify(tem_replace_audio_model));
 
 export default {
 
@@ -44,11 +46,7 @@ export default {
             const token = _.sample(tokens);
             let { model, input, voice } = request.body;
             if (voice in voiceToModelIndex) {
-                voice = (
-                    voiceToModelIndex[voice] >= 0 && voiceToModelIndex[voice] < REPLACE_AUDIO_MODEL.length
-                )
-                    ? REPLACE_AUDIO_MODEL[voiceToModelIndex[voice]]
-                    : "male-botong";
+                voice = REPLACE_AUDIO_MODEL[voiceToModelIndex[voice]] || "male-botong";
                 logger.info(`请求voice切换为: ${voice}`);
             }
             const stream = await audio.createSpeech(model, input, voice, token);
