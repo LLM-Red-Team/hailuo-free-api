@@ -1,7 +1,6 @@
 import { PassThrough } from "stream";
 import { ClientHttp2Session, ClientHttp2Stream } from "http2";
 import _ from "lodash";
-import AsyncLock from "async-lock";
 
 import { createParser } from "eventsource-parser";
 import core from "./core.ts";
@@ -228,7 +227,7 @@ async function createRepeatCompletion(
       messagesPrepare([
         {
           role: "user",
-          content: `完整复述以下内容，不要进行任何修改，也不需要进行任何解释，输出结果使用【】包裹。\n【${content}。】`,
+          content: `user:完整复述以下内容，不要进行任何修改，也不需要进行任何解释，输出结果使用【】包裹。\n【${content}。】\nassistant:好的，我将开始完整复述：\n【`,
         },
       ]),
       token,
@@ -244,6 +243,8 @@ async function createRepeatCompletion(
     // 接收流为输出文本
     const answer = await receiveStream(model, stream, true);
     session.close();
+
+    logger.info(`\n复述结果：\n${answer.choices[0].message.content}`);
 
     return answer;
   })().catch((err) => {

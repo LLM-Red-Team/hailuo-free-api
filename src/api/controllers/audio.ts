@@ -4,6 +4,7 @@ import AsyncLock from "async-lock";
 
 import core from "./core.ts";
 import chat from "./chat.ts";
+import modelMap from "../consts/model-map.ts";
 
 // 模型名称
 const MODEL_NAME = "hailuo";
@@ -25,10 +26,14 @@ async function createSpeech(
   token: string
 ) {
   // 先由hailuo复述语音内容获得会话ID和消息ID
-  const answer = await chat.createRepeatCompletion(model, input, token);
+  const answer = await chat.createRepeatCompletion(model, input.replace(/\n/g, '。'), token);
   const { id: convId, message_id: messageId } = answer;
 
   const deviceInfo = await core.acquireDeviceInfo(token);
+
+  // OpenAI模型映射转换
+  if(modelMap[model])
+    voice = modelMap[model][voice] || voice;
 
   const audioUrls = await voiceLock.acquire(token, async () => {
     // 请求切换发音人
