@@ -8,7 +8,7 @@ import environment from "@/lib/environment.ts";
 import core from "../controllers/core.ts";
 import logger from "@/lib/logger.ts";
 
-const REPLACE_AUDIO_MODEL_ENV = environment.envVars['REPLACE_AUDIO_MODEL'].split(",").map((v) => v.trim());
+const REPLACE_AUDIO_MODEL_ENV = (environment.envVars['REPLACE_AUDIO_MODEL'] || '').split(",").map((v) => v.trim());
 const VOICE_TO_MODEL_INDEX = Object.keys(modelMap["tts-1"]).reduce(
   (obj, key, i) => {
     obj[key] = i;
