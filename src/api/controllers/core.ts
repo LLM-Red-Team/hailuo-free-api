@@ -362,10 +362,24 @@ async function requestStream(
   }
   queryStr = queryStr.substring(1);
   const formData = new FormData();
-  for (let key in data) data[key] && formData.append(key, data[key]);
-  const dataJson = `${util.md5(data.characterID)}${util.md5(
-    data.msgContent.replace(/(\r\n|\n|\r)/g, "")
-  )}${util.md5(data.chatID)}${util.md5(data.form ? data.form : "")}`;
+  for (let key in data) {
+    if (!data[key]) continue;
+    if (_.isBuffer(data[key])) {
+      formData.append(key, data[key], {
+        filename: "audio.mp3",
+        contentType: "audio/mp3",
+      });
+    } else formData.append(key, data[key]);
+  }
+  let dataJson = "";
+  if (data.msgContent)
+    dataJson = `${util.md5(data.characterID)}${util.md5(
+      data.msgContent.replace(/(\r\n|\n|\r)/g, "")
+    )}${util.md5(data.chatID)}${util.md5(data.form ? data.form : "")}`;
+  else if (data.voiceBytes)
+    dataJson = `${util.md5(data.characterID)}${util.md5(data.chatID)}${util.md5(
+      data.voiceBytes
+    )}`;
   data = formData;
   const yy = util.md5(
     encodeURIComponent(`${uri}?${queryStr}`) +
@@ -402,7 +416,13 @@ async function requestStream(
  */
 async function getTokenLiveStatus(token: string) {
   const deviceInfo = await acquireDeviceInfo(token);
-  const result = await request("GET", "/v1/api/user/info", {}, token, deviceInfo);
+  const result = await request(
+    "GET",
+    "/v1/api/user/info",
+    {},
+    token,
+    deviceInfo
+  );
   try {
     const { userInfo } = checkResult(result);
     return _.isObject(userInfo);

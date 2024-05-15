@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { Readable, Writable } from "stream";
 
 import "colors";
+import sox from "sox";
 import mime from "mime";
 import axios from "axios";
 import fs from "fs-extra";
@@ -311,6 +312,30 @@ const util = {
     });
     return result.data.toString("base64");
   },
+
+  async transAudioCode(srcPath, destPath) {
+    return new Promise((resolve, reject) => {
+      const job = sox.transcode(srcPath, destPath, {
+        sampleRate: 44100,
+        format: 'mp3',
+        channelCount: 2,
+        bitRate: 192 * 1024,
+        compressionQuality: 5
+      });
+      job.on('error', function(err) {
+        console.error(err);
+        reject(err);
+      });
+      job.on('progress', function(amountDone, amountTotal) {
+        console.log("progress", amountDone, amountTotal);
+      });
+      job.on('end', function() {
+        console.log("all done");
+        resolve(null);
+      });
+      job.start();
+    });
+  }
 };
 
 export default util;
