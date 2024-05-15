@@ -59,8 +59,8 @@ async function createCompletion(
     const refFileUrls = extractRefFileUrls(messages);
     const refs = refFileUrls.length
       ? await Promise.all(
-          refFileUrls.map((fileUrl) => core.uploadFile(fileUrl, token))
-        )
+        refFileUrls.map((fileUrl) => core.uploadFile(fileUrl, token))
+      )
       : [];
 
     // 如果引用对话ID不正确则重置引用
@@ -144,8 +144,8 @@ async function createCompletionStream(
     const refFileUrls = extractRefFileUrls(messages);
     const refs = refFileUrls.length
       ? await Promise.all(
-          refFileUrls.map((fileUrl) => core.uploadFile(fileUrl, token))
-        )
+        refFileUrls.map((fileUrl) => core.uploadFile(fileUrl, token))
+      )
       : [];
 
     // 如果引用对话ID不正确则重置引用
@@ -373,14 +373,14 @@ function messagesPrepare(
     form:
       refs.length > 0
         ? JSON.stringify([
-            ...refs.map((item) => ({
-              name: "",
-              formType: item.fileType,
-              content: item.filename,
-              fileID: item.fileId,
-            })),
-            { name: "", formType: 1, content },
-          ])
+          ...refs.map((item) => ({
+            name: "",
+            formType: item.fileType,
+            content: item.filename,
+            fileID: item.fileId,
+          })),
+          { name: "", formType: 1, content },
+        ])
         : undefined,
   };
 }
@@ -421,9 +421,10 @@ async function receiveStream(
         const result = _.attempt(() => JSON.parse(event.data));
         if (_.isError(result))
           throw new Error(`Stream response invalid: ${event.data}`);
-        const { statusInfo, data: _data } = result;
+        const { type, statusInfo, data: _data } = result;
         const { code, message } = statusInfo || {};
-        if (code !== 0) throw new Error(`Stream response error: ${message}`);
+        if (code !== 0 && type != 3)
+          throw new Error(`Stream response error: ${message}`);
         const { messageResult } = _data || {};
         if (eventName == "message_result" && messageResult) {
           const { chatID, msgID, isEnd, content, extra } = messageResult;
@@ -435,9 +436,9 @@ async function receiveStream(
           const chunk = content.substring(
             exceptCharIndex != -1
               ? Math.min(
-                  data.choices[0].message.content.length,
-                  exceptCharIndex
-                )
+                data.choices[0].message.content.length,
+                exceptCharIndex
+              )
               : data.choices[0].message.content.length,
             exceptCharIndex == -1 ? content.length : exceptCharIndex
           );
@@ -499,9 +500,10 @@ function createTransStream(model: string, stream: any, endCallback?: Function) {
       const result = _.attempt(() => JSON.parse(event.data));
       if (_.isError(result))
         throw new Error(`Stream response invalid: ${event.data}`);
-      const { statusInfo, data: _data } = result;
+      const { type, statusInfo, data: _data } = result;
       const { code, message } = statusInfo || {};
-      if (code !== 0) throw new Error(`Stream response error: ${message}`);
+      if (code !== 0 && type != 3)
+        throw new Error(`Stream response error: ${message}`);
       const { messageResult } = _data || {};
       if (eventName == "message_result" && messageResult) {
         const { chatID, isEnd, content: text, extra } = messageResult;
