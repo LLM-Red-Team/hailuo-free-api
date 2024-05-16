@@ -118,10 +118,7 @@ async function createTranscriptions(
   const transcodedFilePath = `tmp/${name}_transcodeed.mp3`;
   await util.transAudioCode(filePath, transcodedFilePath);
   const buffer = await fs.readFile(transcodedFilePath);
-  Promise.all([
-    fs.remove(filePath),
-    fs.remove(transcodedFilePath)
-  ])
+  fs.remove(transcodedFilePath)
     .catch(err => logger.error('移除临时文件失败：', err));
   let session: ClientHttp2Session;
   return (async () => {

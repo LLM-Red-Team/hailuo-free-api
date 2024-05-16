@@ -1,6 +1,4 @@
 import _ from "lodash";
-import fs from "fs-extra";
-import mime from "mime";
 
 import Request from "@/lib/request/Request.ts";
 import Response from "@/lib/response/Response.ts";
@@ -62,14 +60,17 @@ export default {
       const tokens = core.tokenSplit(request.headers.authorization);
       // 随机挑选一个token
       const token = _.sample(tokens);
-      if(!request.files['file'])
+      if(!request.files['file'] && !request.body["file"])
         throw new Error('File field is not set');
-      const file = request.files['file'];
-      if(!['audio/mp3', 'audio/mpeg', 'audio/x-wav', 'audio/wave', 'audio/mp4a-latm', 'audio/flac', 'audio/ogg', 'audio/webm'].includes(file.mimetype))
-        throw new Error(`File MIME type ${file.mimetype} is unsupported`);
-      const ext = mime.getExtension(file.mimetype);
-      const tmpFilePath = `tmp/${file.newFilename}.${ext == 'mpga' ? 'mp3' : ext}`;
-      await fs.copy(file.filepath, tmpFilePath);
+      let tmpFilePath;
+      if(request.files['file']) {
+        const file = request.files['file'];
+        if(!['audio/mp3', 'audio/mpeg', 'audio/x-wav', 'audio/wave', 'audio/mp4a-latm', 'audio/flac', 'audio/ogg', 'audio/webm'].includes(file.mimetype))
+          throw new Error(`File MIME type ${file.mimetype} is unsupported`);
+        tmpFilePath = file.filepath;
+      }
+      else
+        throw new Error('File field is not set');
       const { model, response_format: responseFormat = 'json' } = request.body;
       const text = await audio.createTranscriptions(model, tmpFilePath, token);
       return new Response(responseFormat == 'json' ? { text } : text);
