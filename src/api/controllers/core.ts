@@ -378,7 +378,7 @@ async function requestStream(
     )}${util.md5(data.chatID)}${util.md5(data.form ? data.form : "")}`;
   else if (data.voiceBytes)
     dataJson = `${util.md5(data.characterID)}${util.md5(data.chatID)}${util.md5(
-      data.voiceBytes
+      data.voiceBytes.subarray(0, 1024)
     )}`;
   data = formData;
   const yy = util.md5(

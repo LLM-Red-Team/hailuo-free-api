@@ -1,3 +1,4 @@
+import path from 'path';
 import { ClientHttp2Session, ClientHttp2Stream } from "http2";
 import _ from "lodash";
 import fs from "fs-extra";
@@ -113,8 +114,15 @@ async function createTranscriptions(
   token: string,
   retryCount = 0
 ) {
-  await util.transAudioCode(filePath, "trans.mp3");
-  const buffer = await fs.readFile("trans.mp3");
+  const name = path.basename(filePath).replace(path.extname(filePath), '');
+  const transcodedFilePath = `tmp/${name}_transcodeed.mp3`;
+  await util.transAudioCode(filePath, transcodedFilePath);
+  const buffer = await fs.readFile(transcodedFilePath);
+  Promise.all([
+    fs.remove(filePath),
+    fs.remove(transcodedFilePath)
+  ])
+    .catch(err => logger.error('移除临时文件失败：', err));
   let session: ClientHttp2Session;
   return (async () => {
     // 请求流
@@ -142,7 +150,7 @@ async function createTranscriptions(
     // 接收流为输出文本
     const text = await receiveTrasciptionResult(stream);
     session.close();
-
+    
     return text;
   })().catch((err) => {
     session && session.close();
@@ -175,25 +183,30 @@ async function receiveTrasciptionResult(stream: any): Promise<any> {
         if (_.isError(result))
           throw new Error(`Stream response invalid: ${event.data}`);
         const { status_code, err_message, data } = result;
-        if(status_code != 0)
-          throw new Error(`Stream response error: ${err_message}`);
-        console.log(text)
-        if (event.event == "asr_chunk") 
-          text += data.text;
-        else if (event.event == "audio_chunk") {
-          resolve(text);
+        if(status_code == 1200041) {
+          resolve("");
           stream.close();
         }
+        if(status_code != 0)
+          throw new Error(`Stream response error: ${err_message}`);
+        if (event.event == "asr_chunk") {
+          resolve(data.text);
+          stream.close();
+        }
+        // 目前首个asr_chunk就可以获得完整的文本，如果有变动再启用下面这个代替它
+        // if (event.event == "asr_chunk")
+        //   text += data.text;
+        // else if (event.event == "audio_chunk") {
+        //   resolve(text);
+        //   stream.close();
+        // }
       } catch (err) {
         logger.error(err);
         reject(err);
       }
     });
     // 将流数据喂给SSE转换器
-    stream.on("data", (buffer) => {
-      console.log(buffer.toString());
-      parser.feed(buffer.toString());
-    });
+    stream.on("data", (buffer) => parser.feed(buffer.toString()));
     stream.once("error", (err) => reject(err));
     stream.once("close", () => resolve(text));
   });

@@ -1,4 +1,7 @@
+import fs from 'fs-extra';
 import logger from './logger.js';
+
+fs.ensureDirSync('tmp/');
 
 // 允许无限量的监听器
 process.setMaxListeners(Infinity);

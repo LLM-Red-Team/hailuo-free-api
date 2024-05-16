@@ -65,10 +65,10 @@ export default {
       if(!request.files['file'])
         throw new Error('File field is not set');
       const file = request.files['file'];
-      if(!['audio/mp3', 'audio/mpeg', 'audio/x-wav', 'audio/wave', 'video/mp4', 'audio/mp4a-latm', 'audio/flac', 'audio/ogg', 'audio/webm'].includes(file.mimetype))
+      if(!['audio/mp3', 'audio/mpeg', 'audio/x-wav', 'audio/wave', 'audio/mp4a-latm', 'audio/flac', 'audio/ogg', 'audio/webm'].includes(file.mimetype))
         throw new Error(`File MIME type ${file.mimetype} is unsupported`);
       const ext = mime.getExtension(file.mimetype);
-      const tmpFilePath = `${file.newFilename}.${ext == 'mpga' ? 'mp3' : ext}`;
+      const tmpFilePath = `tmp/${file.newFilename}.${ext == 'mpga' ? 'mp3' : ext}`;
       await fs.copy(file.filepath, tmpFilePath);
       const { model, response_format: responseFormat } = request.body;
       const text = await audio.createTranscriptions(model, tmpFilePath, token);

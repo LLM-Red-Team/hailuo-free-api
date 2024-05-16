@@ -322,17 +322,8 @@ const util = {
         bitRate: 192 * 1024,
         compressionQuality: 5
       });
-      job.on('error', function(err) {
-        console.error(err);
-        reject(err);
-      });
-      job.on('progress', function(amountDone, amountTotal) {
-        console.log("progress", amountDone, amountTotal);
-      });
-      job.on('end', function() {
-        console.log("all done");
-        resolve(null);
-      });
+      job.on('error', reject);
+      job.on('end', resolve);
       job.start();
     });
   }

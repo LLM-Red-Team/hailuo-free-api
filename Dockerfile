@@ -4,9 +4,12 @@ WORKDIR /app
 
 COPY . /app
 
-RUN yarn install --registry https://registry.npmmirror.com/ && yarn run build
+RUN yarn install --registry https://registry.npmmirror.com/ && \
+    yarn run build
 
 FROM node:lts-alpine
+
+RUN apk add --no-cache sox
 
 COPY --from=BUILD_IMAGE /app/configs /app/configs
 COPY --from=BUILD_IMAGE /app/package.json /app/package.json
