@@ -81,7 +81,15 @@ https://udify.app/chat/uqBly3aW1LTwzzb3
 
 ### 语音合成Demo
 
+语音合成就是创建语音
+
 ![语音合成](./doc/example-2.png)
+
+### 语音识别Demo
+
+语音识别就是创建转录
+
+![语音识别](./doc/example-7.png)
 
 ### 多轮对话Demo
 
