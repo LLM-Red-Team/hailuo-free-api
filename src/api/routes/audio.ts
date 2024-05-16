@@ -70,7 +70,7 @@ export default {
       const ext = mime.getExtension(file.mimetype);
       const tmpFilePath = `tmp/${file.newFilename}.${ext == 'mpga' ? 'mp3' : ext}`;
       await fs.copy(file.filepath, tmpFilePath);
-      const { model, response_format: responseFormat } = request.body;
+      const { model, response_format: responseFormat = 'json' } = request.body;
       const text = await audio.createTranscriptions(model, tmpFilePath, token);
       return new Response(responseFormat == 'json' ? { text } : text);
     },
