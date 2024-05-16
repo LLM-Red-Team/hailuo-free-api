@@ -1,6 +1,6 @@
 {
   "name": "hailuo-free-api",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "HailuoAI Free API Server",
   "type": "module",
   "main": "dist/index.js",
