@@ -186,6 +186,7 @@ async function receiveTrasciptionResult(stream: any): Promise<any> {
         if(status_code == 1200041) {
           resolve("");
           stream.close();
+          return;
         }
         if(status_code != 0)
           throw new Error(`Stream response error: ${err_message}`);
