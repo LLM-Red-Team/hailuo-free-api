@@ -56,7 +56,7 @@ export default {
     "/transcriptions": async (request: Request) => {
       request
         .validate("body.model", _.isString)
-        .validate("body.response_format", _.isString)
+        .validate("body.response_format", v => _.isUndefined(v) || _.isString(v))
         .validate("headers.authorization", _.isString);
       // token切分
       const tokens = core.tokenSplit(request.headers.authorization);
