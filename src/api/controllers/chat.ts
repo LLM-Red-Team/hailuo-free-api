@@ -422,6 +422,8 @@ async function receiveStream(
         if (_.isError(result))
           throw new Error(`Stream response invalid: ${event.data}`);
         const { type, statusInfo, data: _data } = result;
+        if (type == 8)
+          return;
         const { code, message } = statusInfo || {};
         if (code !== 0 && type != 3)
           throw new Error(`Stream response error: ${message}`);
@@ -501,6 +503,23 @@ function createTransStream(model: string, stream: any, endCallback?: Function) {
       if (_.isError(result))
         throw new Error(`Stream response invalid: ${event.data}`);
       const { type, statusInfo, data: _data } = result;
+      if (type == 8) {
+        const data = `data: ${JSON.stringify({
+          id: convId,
+          model,
+          object: "chat.completion.chunk",
+          choices: [
+            {
+              index: 0,
+              delta: { content: "" },
+              finish_reason: "stop",
+            },
+          ],
+          created,
+        })}\n\n`;
+        !transStream.closed && transStream.write(data);
+        return transStream.end("data: [DONE]\n\n");
+      }
       const { code, message } = statusInfo || {};
       if (code !== 0 && type != 3)
         throw new Error(`Stream response error: ${message}`);

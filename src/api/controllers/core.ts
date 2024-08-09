@@ -24,30 +24,34 @@ const FAKE_HEADERS = {
   Pragma: "no-cache",
   Priority: "u=1, i",
   "Sec-Ch-Ua":
-    '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
   "Sec-Ch-Ua-Mobile": "?0",
   "Sec-Ch-Ua-Platform": '"Windows"',
+  "Sec-Fetch-Dest": "empty",
+  "Sec-Fetch-Mode": "cors",
+  "Sec-Fetch-Site": "same-origin",
   "User-Agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
 };
 // 伪装数据
 const FAKE_USER_DATA = {
   device_platform: "web",
   app_id: "3001",
+  version_code: "22200",
   uuid: null,
   device_id: null,
-  version_code: "21200",
   os_name: "Windows",
   browser_name: "chrome",
-  server_version: "101",
   device_memory: 8,
-  cpu_core_num: 16,
+  cpu_core_num: 12,
   browser_language: "zh-CN",
   browser_platform: "Win32",
-  screen_width: 2560,
-  screen_height: 1440,
+  screen_width: 1920,
+  screen_height: 1080,
   unix: null,
 };
+const SENTRY_RELEASE = "CI7N-1MjJnx5pru-bzzhR";
+const SENTRY_PUBLIC_KEY = "6cf106db5c7b7262eae7cc6b411c776a";
 // 文件最大大小
 const FILE_MAX_SIZE = 100 * 1024 * 1024;
 // 设备信息映射
@@ -78,6 +82,9 @@ async function requestDeviceInfo(token: string) {
       token,
       {
         userId,
+      },
+      {
+        params: FAKE_USER_DATA
       }
     );
     const { deviceIDStr } = checkResult(result);
@@ -315,6 +322,7 @@ async function request(
   const yy = util.md5(
     `${encodeURIComponent(fullUri)}_${dataJson}${util.md5(unix)}ooui`
   );
+  const traceId = util.uuid(false);
   return await axios.request({
     method,
     url: `https://hailuoai.com${fullUri}`,
@@ -326,6 +334,8 @@ async function request(
       Referer: "https://hailuoai.com/",
       Token: token,
       ...FAKE_HEADERS,
+      "Baggage": `sentry-environment=production,sentry-release=${SENTRY_RELEASE},sentry-public_key=${SENTRY_PUBLIC_KEY},sentry-trace_id=${traceId},sentry-sample_rate=1,sentry-sampled=true`,
+      "Sentry-Trace": `${traceId}-${util.uuid(false).substring(16)}-1`,
       ...(options.headers || {}),
       Yy: yy,
     },
@@ -391,6 +401,7 @@ async function requestStream(
     session.on("error", reject);
   });
 
+  const traceId = util.uuid(false);
   const stream = session.request({
     ":method": method,
     ":path": `${uri}?${queryStr}`,
@@ -398,6 +409,8 @@ async function requestStream(
     Referer: "https://hailuoai.com/",
     Token: token,
     ...FAKE_HEADERS,
+    "Baggage": `sentry-environment=production,sentry-release=${SENTRY_RELEASE},sentry-public_key=${SENTRY_PUBLIC_KEY},sentry-trace_id=${traceId},sentry-sample_rate=1,sentry-sampled=true`,
+    "Sentry-Trace": `${traceId}-${util.uuid(false).substring(16)}-1`,
     ...(options.headers || {}),
     Yy: yy,
     ...data.getHeaders(),
