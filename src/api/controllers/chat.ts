@@ -221,13 +221,15 @@ async function createRepeatCompletion(
     // 请求流
     const deviceInfo = await core.acquireDeviceInfo(token);
     let stream: ClientHttp2Stream;
+    // 替换content中的括号符号和#号等非口语符号
+    content = content.replace(/[()（）【】\[\]{}「」『』〖〗《》<>〈〉#]/g, ' ');
     ({ session, stream } = await core.requestStream(
       "POST",
       "/v4/api/chat/msg",
       messagesPrepare([
         {
           role: "user",
-          content: `user:完整复述以下内容，不要进行任何修改，也不需要进行任何解释，输出结果使用【】包裹。\n【${content}。】\nassistant:好的，我将开始完整复述：\n【`,
+          content: `user:完整复述以下内容，不要进行任何修改，也不需要进行任何解释。\n<content>${content}。</content>\nassistant:好的，我将开始完整复述：\n`,
         },
       ]),
       token,
